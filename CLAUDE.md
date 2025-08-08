@@ -31,8 +31,9 @@ This is **Merdia**, a Chrome extension that renders Mermaid diagrams from select
 ### Key Features
 - **Preprocessing**: Strips ```mermaid fences and normalizes bracket labels (removes parentheses inside `[...]`)
 - **Live editing**: Syntax-highlighted code editor with real-time preview
-- **Pan/zoom**: Canvas manipulation with minimap, mouse/keyboard controls
-- **Theming**: Built-in + 9 custom theme presets, auto system theme detection
+- **Pan/zoom**: Canvas manipulation with minimap, mouse/keyboard controls - scroll wheel zooms without Ctrl key
+- **Theming**: Built-in + 9 custom theme presets (modern-light/dark, pastel, ocean, solarized-light/dark, high-contrast, monochrome, grape), auto system theme detection
+- **Diagram styles**: 6 layout presets (default, compact, spacious, curved, angular, minimal, dense) with adjustable spacing and curve styles
 - **Export**: SVG download functionality
 - **Layout**: Resizable split view with persistent state
 
@@ -61,7 +62,10 @@ This is **Merdia**, a Chrome extension that renders Mermaid diagrams from select
 ## Common Tasks
 
 ### Adding New Themes
-Edit `getMermaidThemeConfig()` in `viewer.mjs:382` - add new case with theme variables and update HTML select options.
+Edit `getMermaidThemeConfig()` in `viewer.mjs:407` - add new case with theme variables and update HTML select options.
+
+### Adding New Diagram Styles
+Edit `getStructureConfig()` in `viewer.mjs:388` - add new case with layout parameters (diagramPadding, nodeSpacing, rankSpacing, curve) and update HTML select options.
 
 ### Updating Mermaid
 Replace `mermaid.esm.min.mjs` and ensure chunks are present. Test rendering and export functionality.
@@ -73,6 +77,7 @@ Update `<meta http-equiv="Content-Security-Policy">` in `viewer.html:7` while ma
 
 ### chrome.storage.local (persistent)
 - `theme` - Selected theme identifier
+- `structure` - Selected diagram style/layout preset
 - `splitRatio` - Editor/preview split position
 - `alwaysOnTop` - Window focus preference
 - `popupSize` - Last window dimensions `{width, height}`

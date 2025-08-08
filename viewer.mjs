@@ -552,9 +552,8 @@ function getMermaidThemeConfig(val) {
 }
 
 function setupInteractions() {
-  // Zoom with Ctrl+wheel
+  // Zoom with wheel
   diagramEl.addEventListener('wheel', (e) => {
-    if (!e.ctrlKey && !e.metaKey) return; // preserve normal scroll
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
     zoomAtPoint(factor, e.clientX, e.clientY);
