@@ -12,6 +12,8 @@
       "32": "icon32.png",
       "128": "icon128.png"
     },
-    "minimum_chrome_version": "102"
-  }
-  
+    "minimum_chrome_version": "102",
+    "content_security_policy": {
+      "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+    }
+}

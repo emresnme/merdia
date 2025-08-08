@@ -1,5 +1,5 @@
-// Import the ESM build of Mermaid (ship this file in your extension folder)
-import mermaid from './mermaid.esm.min.mjs';
+// Load Mermaid dynamically so we can surface errors if chunks are missing
+let mermaid = null;
 
 const qs = (sel) => document.querySelector(sel);
 
@@ -13,6 +13,26 @@ const themeSel = qs('#theme');
 let code = '';
 let renderCounter = 0; // unique id for export renders
 let currentTheme = 'default';
+
+async function loadMermaid() {
+  const candidates = [
+    './mermaid.esm.min.mjs',
+    './dist/mermaid.esm.min.mjs',
+    './mermaid/mermaid.esm.min.mjs'
+  ];
+  let lastErr;
+  for (const p of candidates) {
+    try {
+      const mod = await import(p);
+      return mod?.default ?? mod;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  console.error('Failed to load Mermaid ESM. Ensure the ESM bundle and its chunks are present next to the file (expected ./chunks/mermaid.esm.min/*).', lastErr);
+  setStatus('Failed to load Mermaid — missing ESM chunks. Open DevTools for details.');
+  throw lastErr;
+}
 
 async function getCodeFromSession() {
   const id = decodeURIComponent(location.hash.slice(1));
@@ -45,6 +65,10 @@ function render() {
   diagramEl.appendChild(target);
 
   // Run Mermaid
+  if (!mermaid) {
+    setStatus('Mermaid not loaded');
+    return;
+  }
   mermaid.run({ querySelector: '#diagram .mermaid' })
     .then(() => setStatus('Done'))
     .catch((err) => {
@@ -55,6 +79,10 @@ function render() {
 
 async function exportSVG() {
   try {
+    if (!mermaid) {
+      setStatus('Mermaid not loaded');
+      return;
+    }
     const id = `exportGraph-${++renderCounter}`;
     const { svg } = await mermaid.render(id, code);
     const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -86,6 +114,8 @@ async function main() {
     setStatus('Loading…');
     code = await getCodeFromSession();
     rawEl.value = code;
+    // Load Mermaid ESM (with fallbacks) and initialize
+    mermaid = await loadMermaid();
     initMermaid(themeSel.value || 'default');
     render();
   } catch (e) {

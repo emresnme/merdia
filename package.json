@@ -1,0 +1,23 @@
+{
+  "name": "merdia",
+  "version": "1.0.0",
+  "description": "Render selected Mermaid code from any webpage in a popup window, tweak the theme, and export to SVG.",
+  "main": "service_worker.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emresnme/merdia.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/emresnme/merdia/issues"
+  },
+  "homepage": "https://github.com/emresnme/merdia#readme",
+  "dependencies": {
+    "mermaid": "^11.9.0"
+  }
+}
