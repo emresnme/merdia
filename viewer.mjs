@@ -42,9 +42,9 @@ let currentWindowId = null;
 let lastMinimapSource = null;
 let mmDragging = false;
 
-// Fit behavior: slightly zoom in over strict fit
-const FIT_EXTRA_ZOOM = 1.15; // 15% more than contain-fit
-const FIT_PADDING = 8; // px inner padding around diagram
+// Fit behavior: zoom in a bit more by default
+const FIT_EXTRA_ZOOM = 2.50; // previously 1.15 — make initial view closer
+const FIT_PADDING = 6; // slightly reduce padding to gain visual space
 let saveSizeTimer = null;
 
 async function loadMermaid() {
