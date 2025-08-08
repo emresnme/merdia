@@ -10,8 +10,8 @@ Render selected Mermaid code from any webpage in a popup window, tweak the theme
 - **Themes**: `default`, `dark`, `forest`, `neutral`, plus `Auto` (matches system theme).
 - **Export**: Save the rendered diagram as an SVG file.
 - **Pan & Zoom**: Drag to pan; Ctrl/Cmd + wheel to zoom at cursor; Zoom In/Out/ Fit buttons.
-- **Better Fit**: Default “Fit” view is slightly zoomed‑in for readability.
-- **Minimap**: Thumbnail with a viewport rectangle; click/drag to navigate; syncs on resize.
+- **Text scales with zoom**: Fonts scale proportionally with shapes for readability at any zoom.
+- **Better Fit & default view**: Initial view and “Fit” are zoomed‑in for readability.
 - **Open elsewhere**: Open in a new tab or in Chrome’s side panel (with graceful fallback).
 - **Always‑on‑top (best‑effort)**: Keeps the popup in front by refocusing when it blurs.
 - **Resizable split view**: Drag divider; double‑click to reset; layout persists.
@@ -19,6 +19,8 @@ Render selected Mermaid code from any webpage in a popup window, tweak the theme
 - **Robust selection**: Reads selection directly from the page for reliability.
 - **Code normalization**: Removes parentheses inside bracketed labels to avoid Mermaid label issues.
 - **No build step**: Ships the ESM Mermaid bundle in‑repo; CSP‑friendly via `<script type="module">`.
+- **Modern UI**: Clean toolbar, accessible controls, focus rings, keyboard‑friendly.
+- **Code panel toggle**: “Code” button shows/hides the editor (default collapsed, state persists).
 
 ## Quick start (Load Unpacked)
 
@@ -42,9 +44,9 @@ Minimum Chrome version: 102 (Manifest V3, ESM support).
 
 2. Right‑click the selection → choose “Mermaid Diagram”.
 3. A popup opens with:
-    - Diagram preview (left)
-    - Source editor (right)
-    - Controls: Re‑render, Export SVG, Theme selector
+    - Diagram preview
+    - Code panel (toggle via “Code”; default collapsed)
+    - Controls: Re‑render, Export SVG, Zoom In/Out/Fit, Theme, Always on top, Open in tab/side panel
 4. Edit the source if needed and click “Re‑render”.
 5. Click “Export SVG” to download the current render.
 
@@ -76,7 +78,7 @@ No persistent storage is used; selection text is stored ephemerally in `chrome.s
   - Dynamically imports the Mermaid ESM bundle with error handling (ensure ESM and its chunks exist, see Troubleshooting).
   - Initializes Mermaid with the selected theme (supports `Auto`).
   - Renders into `#diagram` using `mermaid.run`.
-  - Enables pan/zoom and minimap‑driven navigation; “Fit” is slightly closer than strict contain.
+  - Enables pan/zoom with zoom‑aware text; “Fit” and default view are slightly closer than strict contain.
   - Exports SVG via `mermaid.render` with a unique render ID.
 - `viewer.html` uses a strict CSP compatible with ESM modules.
 
@@ -98,6 +100,7 @@ Stored preferences/keys in `chrome.storage.local`:
 - `splitRatio` — Divider position between preview and editor.
 - `alwaysOnTop` — Best‑effort focus‑on‑blur toggle.
 - `popupSize` — Last popup window size `{ width, height }`.
+- `codeCollapsed` — Whether the code panel is hidden.
 
 ## Development
 
@@ -112,11 +115,11 @@ Local testing flow:
 - Navigate to any page containing a Mermaid block, select it, and use the context menu.
 - Use DevTools in the popup to inspect console logs if rendering fails.
 
-Pan & zoom tips:
+Tips:
 
 - Drag the diagram area to pan. Click links inside the SVG normally; panning ignores link clicks.
 - Ctrl/Cmd + mouse wheel zooms at the cursor. Use the toolbar for Zoom In/Out/Fit.
-- The minimap shows a live viewport; click/drag the minimap to navigate quickly.
+- Use the “Code” button to show/hide the code panel. Your choice is remembered.
 
 ## Troubleshooting
 
