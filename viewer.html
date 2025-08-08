@@ -11,16 +11,30 @@
     <div id="toolbar">
       <button id="rerender" type="button">Re-render</button>
       <button id="export" type="button">Export SVG</button>
+      <button id="zoomOut" type="button" title="Zoom out">−</button>
+      <button id="zoomIn" type="button" title="Zoom in">＋</button>
+      <button id="fit" type="button" title="Fit to view">Fit</button>
       <select id="theme">
+        <option value="auto">auto (system)</option>
         <option value="default">default</option>
         <option value="dark">dark</option>
         <option value="forest">forest</option>
         <option value="neutral">neutral</option>
       </select>
+      <label class="ontop-toggle"><input id="ontop" type="checkbox"/> Always on top</label>
+      <button id="openTab" type="button" title="Open in new tab">Open Tab</button>
+      <button id="openSide" type="button" title="Open in side panel">Open Side</button>
       <span id="status">Loading…</span>
     </div>
     <div id="content">
-      <div id="diagram" aria-live="polite"></div>
+      <div id="diagram" aria-live="polite">
+        <div id="canvas"></div>
+        <div id="minimap" aria-hidden="true">
+          <div id="mm-content"></div>
+          <div id="mm-viewport"></div>
+        </div>
+      </div>
+      <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize editor"></div>
       <textarea id="raw" spellcheck="false" aria-label="Mermaid source"></textarea>
     </div>
   </div>

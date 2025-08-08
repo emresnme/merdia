@@ -1,41 +1,102 @@
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
 
+:root {
+  --bg: #ffffff;
+  --panel: #fafafa;
+  --border: #e5e7eb;
+  --text: #0f172a;
+  --toolbar-bg: #ffffff;
+}
+
+[data-theme="dark"] {
+  --bg: #0b0f1a;
+  --panel: #0f172a;
+  --border: #243041;
+  --text: #e5e7eb;
+  --toolbar-bg: #0b0f1a;
+}
+
 #toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
+  background: var(--toolbar-bg);
 }
+ #toolbar select, #toolbar button, #toolbar label { font-size: 13px; }
+ .ontop-toggle { margin-left: 6px; user-select: none; }
 
 #content {
+  --left: 1fr;
+  --right: 38%;
   display: grid;
-  grid-template-columns: 1fr 38%;
+  grid-template-columns: var(--left) 6px var(--right);
   gap: 8px;
   height: calc(100% - 49px);
   padding: 10px;
 }
 
+#divider {
+  width: 6px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  border-radius: 3px;
+  cursor: col-resize;
+}
+
 #diagram {
-  overflow: auto;
+  position: relative;
+  overflow: hidden;
   height: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 12px;
-  background: #fff;
+  background: var(--bg);
+}
+
+#canvas {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  transform-origin: 0 0;
+}
+
+#minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 180px;
+  height: 120px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#mm-content { position: absolute; inset: 0; }
+#mm-viewport {
+  position: absolute;
+  border: 2px solid #3b82f6;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(59,130,246,.3);
+  pointer-events: none;
 }
 
 #raw {
   height: 100%;
   width: 100%;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--border);
   border-radius: 6px;
   padding: 10px;
-  background: #fafafa;
+  background: var(--panel);
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   line-height: 1.35;
   resize: none;
   white-space: pre;
   overflow: auto;
 }
+
+body { background: var(--bg); color: var(--text); }
