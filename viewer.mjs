@@ -54,6 +54,16 @@ function setStatus(msg) {
   if (statusEl) statusEl.textContent = msg;
 }
 
+// Remove normal parentheses inside square-bracket labels, e.g.
+// PP[Post-processing<br/>(re-ranking, cleaning)] -> PP[Post-processing<br/>re-ranking, cleaning]
+function normalizeBracketLabelParens(text) {
+  if (!text) return text;
+  return text.replace(/\[([^\[\]]*)\]/g, (full, inner) => {
+    const cleaned = inner.replace(/\(([^()]*)\)/g, '$1');
+    return `[${cleaned}]`;
+  });
+}
+
 function render() {
   setStatus('Rendering…');
   diagramEl.innerHTML = ''; // clear previous render
@@ -61,7 +71,8 @@ function render() {
   // Create a target with the mermaid class and set textContent (not innerHTML)
   const target = document.createElement('div');
   target.className = 'mermaid';
-  target.textContent = code;
+  const sanitized = normalizeBracketLabelParens(code);
+  target.textContent = sanitized;
   diagramEl.appendChild(target);
 
   // Run Mermaid
@@ -84,7 +95,8 @@ async function exportSVG() {
       return;
     }
     const id = `exportGraph-${++renderCounter}`;
-    const { svg } = await mermaid.render(id, code);
+    const sanitized = normalizeBracketLabelParens(code);
+    const { svg } = await mermaid.render(id, sanitized);
     const blob = new Blob([svg], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -113,6 +125,7 @@ async function main() {
   try {
     setStatus('Loading…');
     code = await getCodeFromSession();
+    code = normalizeBracketLabelParens(code);
     rawEl.value = code;
     // Load Mermaid ESM (with fallbacks) and initialize
     mermaid = await loadMermaid();

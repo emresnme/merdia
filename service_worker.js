@@ -13,6 +13,16 @@ chrome.runtime.onInstalled.addListener(() => {
     const m = text.match(fence);
     return m ? m[1] : text;
   }
+
+  // Remove normal parentheses inside square-bracket labels, e.g.
+  // PP[Post-processing<br/>(re-ranking, cleaning)] -> PP[Post-processing<br/>re-ranking, cleaning]
+  function normalizeBracketLabelParens(text) {
+    if (!text) return text;
+    return text.replace(/\[([^\[\]]*)\]/g, (full, inner) => {
+      const cleaned = inner.replace(/\(([^()]*)\)/g, '$1');
+      return `[${cleaned}]`;
+    });
+  }
   
   function safeUUID() {
     if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -34,7 +44,8 @@ chrome.runtime.onInstalled.addListener(() => {
       const selection = (selectedFromPage || info.selectionText || "").trim();
       if (!selection) return;
   
-      const code = stripFences(selection);
+      const rawCode = stripFences(selection);
+      const code = normalizeBracketLabelParens(rawCode);
       const id = safeUUID();
   
       // Store in session storage (ephemeral). Keyed by id.
