@@ -11,6 +11,8 @@ const mmContentEl = qs('#mm-content');
 const mmViewportEl = qs('#mm-viewport');
 const dividerEl = qs('#divider');
 const rawEl = qs('#raw');
+const codeWrapEl = qs('#codeWrap');
+const codeHighlightEl = qs('#codeHighlight');
 const exportBtn = qs('#export');
 const rerenderBtn = qs('#rerender');
 const themeSel = qs('#theme');
@@ -195,6 +197,8 @@ async function main() {
     code = await getCodeFromSession();
     code = normalizeBracketLabelParens(code);
     rawEl.value = code;
+    // Initialize syntax highlight overlay
+    if (codeHighlightEl) updateHighlight();
     // Load Mermaid ESM (with fallbacks) and initialize
     mermaid = await loadMermaid();
     initMermaid(themeSel.value || 'auto');
@@ -209,7 +213,15 @@ async function main() {
 // UI bindings
 rawEl.addEventListener('input', () => {
   code = rawEl.value;
+  scheduleHighlightUpdate();
 });
+rawEl.addEventListener('scroll', syncHighlightScroll);
+rawEl.addEventListener('select', updateOverlaySelectionVisibility);
+rawEl.addEventListener('mouseup', updateOverlaySelectionVisibility);
+rawEl.addEventListener('keyup', updateOverlaySelectionVisibility);
+rawEl.addEventListener('focus', updateOverlaySelectionVisibility);
+rawEl.addEventListener('blur', () => setOverlayHidden(false));
+document.addEventListener('selectionchange', updateOverlaySelectionVisibility);
 
 rerenderBtn.addEventListener('click', () => {
   // Reinitialize to apply theme changes too
@@ -221,6 +233,8 @@ exportBtn.addEventListener('click', exportSVG);
 themeSel.addEventListener('change', async () => {
   await chrome.storage.local.set({ theme: themeSel.value });
   initMermaid(themeSel.value);
+  // Recolor code overlay if needed (mainly for dark/light backgrounds)
+  scheduleHighlightUpdate();
   render();
 });
 
@@ -257,6 +271,105 @@ ontopChk.addEventListener('change', async () => {
 main();
 
 // --------- Helpers & new features ---------
+
+// ---------- Lightweight Mermaid syntax highlighting overlay ----------
+let highlightPending = false;
+
+function scheduleHighlightUpdate() {
+  if (highlightPending) return;
+  highlightPending = true;
+  requestAnimationFrame(() => {
+    highlightPending = false;
+    updateHighlight();
+  });
+}
+
+function syncHighlightScroll() {
+  if (!codeHighlightEl || !rawEl) return;
+  codeHighlightEl.scrollTop = rawEl.scrollTop;
+  codeHighlightEl.scrollLeft = rawEl.scrollLeft;
+}
+
+function hasTextSelection() {
+  if (!rawEl) return false;
+  const { selectionStart, selectionEnd } = rawEl;
+  return typeof selectionStart === 'number' && typeof selectionEnd === 'number' && selectionStart !== selectionEnd;
+}
+
+function setOverlayHidden(hidden) {
+  if (!codeWrapEl) return;
+  codeWrapEl.classList.toggle('hide-overlay', !!hidden);
+}
+
+function updateOverlaySelectionVisibility() {
+  // Hide overlay when user has a selection inside the textarea to avoid visual double text
+  const activeInRaw = document.activeElement === rawEl;
+  setOverlayHidden(activeInRaw && hasTextSelection());
+}
+
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function highlightMermaidLine(line) {
+  const trimmed = line.trimStart();
+  // Comments starting with %% (ignoring leading spaces)
+  if (trimmed.startsWith('%%')) {
+    return `<span class="tok-comment">${escapeHtml(line)}</span>`;
+  }
+
+  // Extract strings to avoid tokenizing inside them
+  const strings = [];
+  const strRe = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g;
+  let placeholderLine = line.replace(strRe, (m) => {
+    const idx = strings.push(m) - 1;
+    return `___STR${idx}___`;
+  });
+
+  // Escape HTML
+  let out = escapeHtml(placeholderLine);
+
+  // Keywords
+  const kw = /(\b)(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram-v2|stateDiagram|erDiagram|journey|gantt|pie|gitGraph|mindmap|timeline|quadrantChart|xychart-beta|subgraph|end|style|linkStyle|classDef|class|click|direction|accTitle|accDescr|accDescription|dateFormat|axisFormat|title|LR|RL|TB|TD|BT)(\b)/g;
+  out = out.replace(kw, '$1<span class="tok-keyword">$2</span>$3');
+
+  // Node id at line start before a shape delimiter ( [ ( { )
+  out = out.replace(/^(\s*)([A-Za-z][\w:-]*)(\s*)(?=[\[{(])/,
+    (m, a, id, b) => `${a}<span class="tok-node">${id}</span>${b}`);
+
+  // Attribute keys before colon (e.g., fill:#fff)
+  out = out.replace(/\b([A-Za-z_][\w-]*)\s*:(?=)/g, '<span class="tok-attr">$1</span>:');
+
+  // Arrows and connectors
+  out = out.replace(/<?[-.=]{2,}[ox]?>?/g, (m) => `<span class="tok-arrow">${m}</span>`);
+
+  // Numbers
+  out = out.replace(/\b\d+(?:\.\d+)?\b/g, (m) => `<span class="tok-number">${m}</span>`);
+
+  // Restore strings
+  out = out.replace(/___STR(\d+)___/g, (m, i) => {
+    const s = strings[Number(i)] || '';
+    return `<span class="tok-string">${escapeHtml(s)}</span>`;
+  });
+
+  return out;
+}
+
+function highlightMermaid(src) {
+  const lines = src.split(/\r?\n/);
+  return lines.map(highlightMermaidLine).join('\n');
+}
+
+function updateHighlight() {
+  if (!codeHighlightEl) return;
+  const src = rawEl ? rawEl.value : '';
+  codeHighlightEl.innerHTML = highlightMermaid(src || '');
+  // Keep overlay scroll in sync after content changes
+  syncHighlightScroll();
+}
 
 function resolveTheme(val) {
   if (val === 'auto') {

@@ -7,6 +7,7 @@ Render selected Mermaid code from any webpage in a popup window, tweak the theme
 - **Context menu rendering**: Right‑click selected Mermaid code → “Mermaid Diagram”.
 - **Fence aware**: Automatically strips ```mermaid fences if present.
 - **Live preview**: Edit the source in the popup and re‑render.
+- **Syntax‑highlighted editor**: Mermaid code is colorized for readability while you type.
 - **Themes**: `default`, `dark`, `forest`, `neutral`, `auto` (system), plus presets: `Modern (light)`, `Modern (dark)`, `Pastel`, `Ocean`, `Solarized (light)`, `Solarized (dark)`, `High Contrast`, `Monochrome`, `Grape`.
 - **Export**: Save the rendered diagram as an SVG file.
 - **Pan & Zoom**: Drag to pan; Ctrl/Cmd + wheel to zoom at cursor; Zoom In/Out/ Fit buttons.

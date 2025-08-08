@@ -193,7 +193,7 @@ html, body, #app { height: 100%; margin: 0; font-family: system-ui, -apple-syste
   gap: 0;
 }
 #content.collapsed #divider,
-#content.collapsed #raw {
+#content.collapsed .code-wrap {
   display: none;
 }
 
@@ -245,20 +245,74 @@ html, body, #app { height: 100%; margin: 0; font-family: system-ui, -apple-syste
   pointer-events: none;
 }
 
-#raw {
+.code-wrap {
   height: 100%;
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 10px;
   background: var(--panel);
-  color: var(--text);
+  position: relative;
+  overflow: hidden;
+}
+.code-wrap .syntax {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  line-height: 1.35;
+  font-size: 13px;
+  line-height: 18px; /* fixed line height to match textarea exactly */
+  white-space: pre;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  pointer-events: none; /* let the textarea handle all interactions */
+  user-select: none; /* prevent selecting overlay text */
+  z-index: 0; /* stay below the textarea */
+  scrollbar-width: none; /* Firefox: hide overlay scrollbars */
+}
+.code-wrap .syntax::-webkit-scrollbar { width: 0; height: 0; }
+#codeWrap.hide-overlay .syntax { visibility: hidden; }
+#codeWrap.hide-overlay #raw { color: var(--text); }
+#raw {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  padding: 10px;
+  border: 0;
   resize: none;
+  background: transparent;
+  color: transparent; /* caret only; actual colors in overlay */
+  caret-color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 18px; /* fixed line height to match overlay exactly */
   white-space: pre;
   overflow: auto;
+  z-index: 1;
+  font-variant-ligatures: none;
+  tab-size: 2;
 }
-#raw:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+#raw::-webkit-scrollbar { width: 10px; height: 10px; }
+.code-wrap .syntax, #raw { font-variant-ligatures: none; tab-size: 2; letter-spacing: 0; }
+#raw:focus-visible { outline: none; box-shadow: none; }
+
+/* Syntax token colors */
+.syntax .tok-comment { color: #6b7280; font-style: italic; }
+[data-theme="dark"] .syntax .tok-comment { color: #94a3b8; }
+.syntax .tok-keyword { color: #2563eb; font-weight: 600; }
+[data-theme="dark"] .syntax .tok-keyword { color: #60a5fa; }
+.syntax .tok-attr { color: #0ea5e9; }
+[data-theme="dark"] .syntax .tok-attr { color: #67e8f9; }
+.syntax .tok-arrow { color: #16a34a; }
+[data-theme="dark"] .syntax .tok-arrow { color: #34d399; }
+.syntax .tok-node { color: #9333ea; }
+[data-theme="dark"] .syntax .tok-node { color: #c084fc; }
+.syntax .tok-string { color: #be123c; }
+[data-theme="dark"] .syntax .tok-string { color: #fca5a5; }
+.syntax .tok-number { color: #b45309; }
+[data-theme="dark"] .syntax .tok-number { color: #f59e0b; }
 
 body { background: var(--bg); color: var(--text); }
