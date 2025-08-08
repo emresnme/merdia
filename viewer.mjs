@@ -350,7 +350,52 @@ function zoomAtPoint(f, clientX, clientY) {
 function applyTransform() {
   const rtx = Math.round(tx);
   const rty = Math.round(ty);
-  canvasEl.style.transform = `translate(${rtx}px, ${rty}px) scale(${scale})`;
+  // Translate the canvas in CSS for smooth panning
+  canvasEl.style.transform = `translate(${rtx}px, ${rty}px)`;
+  // Apply zoom inside the SVG to ensure text scales with shapes, even after re-render
+  applySvgScale();
+}
+
+// Ensure zoom is applied inside the SVG content so fonts scale consistently
+function applySvgScale() {
+  if (!lastSvg) return;
+  try {
+    // Find or create a wrapper group to carry the zoom transform
+    let wrap = lastSvg.querySelector('[data-zoom-wrapper]');
+    if (!wrap) {
+      const svgNS = 'http://www.w3.org/2000/svg';
+      wrap = document.createElementNS(svgNS, 'g');
+      wrap.setAttribute('data-zoom-wrapper', '');
+      // Move all children except <defs> and <style> into the wrapper, preserving defs/styles at top level
+      const children = Array.from(lastSvg.childNodes);
+      for (const node of children) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const tag = node.tagName.toLowerCase();
+          if (tag === 'defs' || tag === 'style') {
+            continue;
+          }
+        }
+        wrap.appendChild(node);
+      }
+      lastSvg.appendChild(wrap);
+    }
+    // Avoid clipping when scaled content exceeds the original SVG viewport
+    // This ensures no white bands appear as we zoom in.
+    lastSvg.style.overflow = 'visible';
+    // Mermaid sets max-width:100% on the root SVG; override so the root can grow with zoom
+    lastSvg.style.maxWidth = 'none';
+    // Expand the intrinsic box of the SVG to match the scaled content
+    if (lastSvgSize && isFinite(lastSvgSize.w) && isFinite(lastSvgSize.h)) {
+      lastSvg.setAttribute('width', String(Math.max(1, Math.round(lastSvgSize.w * scale))));
+      lastSvg.setAttribute('height', String(Math.max(1, Math.round(lastSvgSize.h * scale))));
+    }
+    wrap.setAttribute('transform', `scale(${scale})`);
+  } catch (e) {
+    // Fallback: apply scale at the canvas level if anything goes wrong
+    const rtx = Math.round(tx);
+    const rty = Math.round(ty);
+    canvasEl.style.transform = `translate(${rtx}px, ${rty}px) scale(${scale})`;
+  }
 }
 
 function fitToView() {
