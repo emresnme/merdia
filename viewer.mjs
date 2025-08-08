@@ -302,9 +302,8 @@ function setOverlayHidden(hidden) {
 }
 
 function updateOverlaySelectionVisibility() {
-  // Hide overlay when user has a selection inside the textarea to avoid visual double text
-  const activeInRaw = document.activeElement === rawEl;
-  setOverlayHidden(activeInRaw && hasTextSelection());
+  // Hide overlay only when user has an actual text selection (not just cursor position)
+  setOverlayHidden(hasTextSelection());
 }
 
 function escapeHtml(s) {
