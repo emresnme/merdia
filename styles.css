@@ -187,6 +187,16 @@ html, body, #app { height: 100%; margin: 0; font-family: system-ui, -apple-syste
   padding: 10px;
 }
 
+/* Collapsed code panel */
+#content.collapsed {
+  grid-template-columns: 1fr 0 0;
+  gap: 0;
+}
+#content.collapsed #divider,
+#content.collapsed #raw {
+  display: none;
+}
+
 #divider {
   width: 6px;
   background: linear-gradient(90deg, transparent, var(--border), transparent);

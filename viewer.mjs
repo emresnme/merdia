@@ -19,6 +19,7 @@ const zoomOutBtn = qs('#zoomOut');
 const fitBtn = qs('#fit');
 const openTabBtn = qs('#openTab');
 const openSideBtn = qs('#openSide');
+const toggleCodeBtn = qs('#toggleCode');
 const ontopChk = qs('#ontop');
 
 let code = '';
@@ -271,6 +272,24 @@ function setupInteractions() {
     zoomAtPoint(factor, e.clientX, e.clientY);
   }, { passive: false });
 
+  // Toggle code panel
+  if (toggleCodeBtn) {
+    toggleCodeBtn.addEventListener('click', async () => {
+      const content = document.getElementById('content');
+      if (!content) return;
+      const collapsed = content.classList.toggle('collapsed');
+      toggleCodeBtn.setAttribute('aria-pressed', String(!collapsed));
+      try { await chrome.storage.local.set({ codeCollapsed: collapsed }); } catch (_) {}
+      if (collapsed) {
+        // Ensure CSS collapsed rule takes effect over any previous inline sizing
+        content.style.gridTemplateColumns = '';
+      } else {
+        // Restoring layout after un-collapsing re-applies saved split ratio
+        restoreLayout();
+      }
+    });
+  }
+
   // Pan with mouse drag
   diagramEl.addEventListener('mousedown', (e) => {
     // Ignore if clicking a link inside the SVG
@@ -509,8 +528,15 @@ function resetSplit() {
 
 async function restoreLayout() {
   const content = document.getElementById('content');
-  const { splitRatio } = await chrome.storage.local.get('splitRatio');
-  if (splitRatio && content) {
+  const { splitRatio, codeCollapsed } = await chrome.storage.local.get(['splitRatio', 'codeCollapsed']);
+  if (content && typeof codeCollapsed === 'boolean') {
+    if (codeCollapsed) content.classList.add('collapsed');
+    else content.classList.remove('collapsed');
+  }
+  if (toggleCodeBtn && content) {
+    toggleCodeBtn.setAttribute('aria-pressed', String(!content.classList.contains('collapsed')));
+  }
+  if (splitRatio && content && !content.classList.contains('collapsed')) {
     // Apply after first layout
     requestAnimationFrame(() => {
       const rect = content.getBoundingClientRect();
