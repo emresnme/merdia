@@ -7,11 +7,12 @@ Render selected Mermaid code from any webpage in a popup window, tweak the theme
 - **Context menu rendering**: Right‑click selected Mermaid code → “Mermaid Diagram”.
 - **Fence aware**: Automatically strips ```mermaid fences if present.
 - **Live preview**: Edit the source in the popup and re‑render.
-- **Themes**: `default`, `dark`, `forest`, `neutral`, plus `Auto` (matches system theme).
+- **Themes**: `default`, `dark`, `forest`, `neutral`, `auto` (system), plus presets: `Modern (light)`, `Modern (dark)`, `Pastel`, `Ocean`, `Solarized (light)`, `Solarized (dark)`, `High Contrast`, `Monochrome`, `Grape`.
 - **Export**: Save the rendered diagram as an SVG file.
 - **Pan & Zoom**: Drag to pan; Ctrl/Cmd + wheel to zoom at cursor; Zoom In/Out/ Fit buttons.
 - **Text scales with zoom**: Fonts scale proportionally with shapes for readability at any zoom.
 - **Better Fit & default view**: Initial view and “Fit” are zoomed‑in for readability.
+- **Refined spacing & curves**: Increased node/rank spacing and smooth edges (`basis` curve) for clarity.
 - **Open elsewhere**: Open in a new tab or in Chrome’s side panel (with graceful fallback).
 - **Always‑on‑top (best‑effort)**: Keeps the popup in front by refocusing when it blurs.
 - **Resizable split view**: Drag divider; double‑click to reset; layout persists.

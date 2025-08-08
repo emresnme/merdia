@@ -169,8 +169,9 @@ async function exportSVG() {
 
 function initMermaid(theme = 'default') {
   currentTheme = theme;
-  resolvedTheme = resolveTheme(theme);
-  if (resolvedTheme === 'dark') {
+  const cfg = getMermaidThemeConfig(theme);
+  resolvedTheme = cfg.theme;
+  if (cfg.isDark) {
     document.documentElement.setAttribute('data-theme', 'dark');
   } else {
     // If not dark, remove attribute for light to use default vars
@@ -179,7 +180,9 @@ function initMermaid(theme = 'default') {
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'loose', // allows links & HTML labels; use 'strict' if you prefer
-    theme: resolvedTheme
+    theme: cfg.theme,
+    themeVariables: cfg.themeVariables,
+    flowchart: cfg.flowchart
   });
 }
 
@@ -261,6 +264,153 @@ function resolveTheme(val) {
     return isDark ? 'dark' : 'default';
   }
   return val || 'default';
+}
+
+function getMermaidThemeConfig(val) {
+  const isSysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const font = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"';
+  const baseFlow = { htmlLabels: true, diagramPadding: 8, nodeSpacing: 40, rankSpacing: 40, curve: 'basis' };
+
+  const mk = (theme, isDark, vars = {}) => ({ theme, isDark, themeVariables: { fontFamily: font, ...vars }, flowchart: baseFlow });
+
+  switch (val) {
+    case 'modern-light':
+      return mk('default', false, {
+        mainBkg: '#ffffff',
+        primaryColor: '#F5F7FB',
+        primaryTextColor: '#0B1221',
+        primaryBorderColor: '#D1D7E0',
+        secondaryColor: '#EEF2FF',
+        tertiaryColor: '#E5E7EB',
+        textColor: '#0B1221',
+        lineColor: '#6B7280',
+        clusterBkg: '#F9FAFB',
+        clusterBorder: '#D1D5DB',
+        edgeLabelBackground: '#ffffff'
+      });
+    case 'modern-dark':
+      return mk('dark', true, {
+        mainBkg: '#0B1221',
+        primaryColor: '#1F2937',
+        primaryTextColor: '#E5E7EB',
+        primaryBorderColor: '#374151',
+        secondaryColor: '#111827',
+        tertiaryColor: '#374151',
+        textColor: '#E5E7EB',
+        lineColor: '#94A3B8',
+        clusterBkg: '#0F172A',
+        clusterBorder: '#334155',
+        edgeLabelBackground: '#0B1221'
+      });
+    case 'pastel':
+      return mk('default', false, {
+        mainBkg: '#ffffff',
+        primaryColor: '#F8FAFC',
+        primaryTextColor: '#0F172A',
+        primaryBorderColor: '#E2E8F0',
+        secondaryColor: '#FFE4E6',
+        tertiaryColor: '#E9D5FF',
+        textColor: '#0F172A',
+        lineColor: '#94A3B8',
+        clusterBkg: '#FAFAFA',
+        clusterBorder: '#E5E7EB',
+        edgeLabelBackground: '#ffffff'
+      });
+    case 'ocean':
+      return mk('dark', true, {
+        mainBkg: '#0B1E2D',
+        primaryColor: '#123B5E',
+        primaryTextColor: '#D8EFFF',
+        primaryBorderColor: '#1B4965',
+        secondaryColor: '#0F2A3D',
+        tertiaryColor: '#1B4965',
+        textColor: '#D8EFFF',
+        lineColor: '#66A3C7',
+        clusterBkg: '#0F2A3D',
+        clusterBorder: '#1B4965',
+        edgeLabelBackground: '#0B1E2D'
+      });
+    case 'solarized-light':
+      return mk('default', false, {
+        mainBkg: '#FDF6E3',
+        primaryColor: '#EEE8D5',
+        primaryTextColor: '#073642',
+        primaryBorderColor: '#D6CFB2',
+        secondaryColor: '#E1DBBE',
+        tertiaryColor: '#EAE2C8',
+        textColor: '#073642',
+        lineColor: '#586E75',
+        clusterBkg: '#F5EFD8',
+        clusterBorder: '#D6CFB2',
+        edgeLabelBackground: '#FDF6E3'
+      });
+    case 'solarized-dark':
+      return mk('dark', true, {
+        mainBkg: '#002B36',
+        primaryColor: '#073642',
+        primaryTextColor: '#EEE8D5',
+        primaryBorderColor: '#094552',
+        secondaryColor: '#0B3A46',
+        tertiaryColor: '#0B3A46',
+        textColor: '#EEE8D5',
+        lineColor: '#839496',
+        clusterBkg: '#073642',
+        clusterBorder: '#0B3A46',
+        edgeLabelBackground: '#002B36'
+      });
+    case 'high-contrast':
+      return mk('dark', true, {
+        mainBkg: '#000000',
+        primaryColor: '#111111',
+        primaryTextColor: '#FFFFFF',
+        primaryBorderColor: '#FFFFFF',
+        secondaryColor: '#000000',
+        tertiaryColor: '#000000',
+        textColor: '#FFFFFF',
+        lineColor: '#FFFFFF',
+        clusterBkg: '#000000',
+        clusterBorder: '#FFFFFF',
+        edgeLabelBackground: '#000000'
+      });
+    case 'monochrome':
+      return mk('default', false, {
+        mainBkg: '#FFFFFF',
+        primaryColor: '#F8F9FA',
+        primaryTextColor: '#111111',
+        primaryBorderColor: '#111111',
+        secondaryColor: '#FFFFFF',
+        tertiaryColor: '#FFFFFF',
+        textColor: '#111111',
+        lineColor: '#111111',
+        clusterBkg: '#FFFFFF',
+        clusterBorder: '#111111',
+        edgeLabelBackground: '#FFFFFF'
+      });
+    case 'grape':
+      return mk('dark', true, {
+        mainBkg: '#100317',
+        primaryColor: '#2A0F3B',
+        primaryTextColor: '#F5F3FF',
+        primaryBorderColor: '#6D28D9',
+        secondaryColor: '#1A0B24',
+        tertiaryColor: '#6D28D9',
+        textColor: '#F5F3FF',
+        lineColor: '#A78BFA',
+        clusterBkg: '#1A0B24',
+        clusterBorder: '#6D28D9',
+        edgeLabelBackground: '#100317'
+      });
+    case 'auto': {
+      const dark = !!isSysDark;
+      return mk(dark ? 'dark' : 'default', dark);
+    }
+    default: {
+      // built-ins: default, dark, forest, neutral, etc.
+      const t = val || 'default';
+      const dark = t === 'dark';
+      return mk(t, dark);
+    }
+  }
 }
 
 function setupInteractions() {
