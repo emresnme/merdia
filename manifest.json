@@ -1,0 +1,17 @@
+{
+    "manifest_version": 3,
+    "name": "Mermaid Diagram from Selection",
+    "version": "1.1.0",
+    "description": "Right-click Mermaid code → render it in a popup window.",
+    "permissions": ["contextMenus", "storage", "scripting", "activeTab"],
+    "background": {
+      "service_worker": "service_worker.js"
+    },
+    "icons": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "128": "icon128.png"
+    },
+    "minimum_chrome_version": "102"
+  }
+  

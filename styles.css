@@ -1,0 +1,41 @@
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+#toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+#content {
+  display: grid;
+  grid-template-columns: 1fr 38%;
+  gap: 8px;
+  height: calc(100% - 49px);
+  padding: 10px;
+}
+
+#diagram {
+  overflow: auto;
+  height: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fff;
+}
+
+#raw {
+  height: 100%;
+  width: 100%;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 10px;
+  background: #fafafa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  line-height: 1.35;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+}
