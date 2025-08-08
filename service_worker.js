@@ -53,11 +53,15 @@ chrome.runtime.onInstalled.addListener(() => {
   
       // Open viewer window with the id
       const url = chrome.runtime.getURL(`viewer.html#${encodeURIComponent(id)}`);
+      // Use last saved size if available, otherwise a larger default
+      const { popupSize } = await chrome.storage.local.get('popupSize');
+      const width = (popupSize && popupSize.width) ? popupSize.width : 1200;
+      const height = (popupSize && popupSize.height) ? popupSize.height : 800;
       await chrome.windows.create({
         url,
         type: "popup",
-        width: 900,
-        height: 620
+        width,
+        height
       });
     } catch (err) {
       // Non-fatal; just log for debugging

@@ -44,6 +44,7 @@ let mmDragging = false;
 // Fit behavior: slightly zoom in over strict fit
 const FIT_EXTRA_ZOOM = 1.15; // 15% more than contain-fit
 const FIT_PADDING = 8; // px inner padding around diagram
+let saveSizeTimer = null;
 
 async function loadMermaid() {
   const candidates = [
@@ -303,8 +304,12 @@ function setupInteractions() {
     });
   }
 
-  // Keep minimap in sync on window resize
-  window.addEventListener('resize', () => updateMinimap());
+  // Keep minimap in sync on window resize and persist popup size (throttled)
+  window.addEventListener('resize', () => {
+    updateMinimap();
+    if (saveSizeTimer) clearTimeout(saveSizeTimer);
+    saveSizeTimer = setTimeout(savePopupSize, 250);
+  });
 }
 
 function onPanMove(e) {
@@ -517,5 +522,13 @@ function applyAlwaysOnTop() {
     }
   } catch (_) {
     window.onblur = null;
+  }
+}
+
+function savePopupSize() {
+  const width = window.outerWidth || document.documentElement.clientWidth || window.innerWidth;
+  const height = window.outerHeight || document.documentElement.clientHeight || window.innerHeight;
+  if (width && height) {
+    chrome.storage.local.set({ popupSize: { width, height } });
   }
 }
