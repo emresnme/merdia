@@ -16,6 +16,7 @@ const codeHighlightEl = qs('#codeHighlight');
 const exportBtn = qs('#export');
 const rerenderBtn = qs('#rerender');
 const themeSel = qs('#theme');
+const structureSel = qs('#structure');
 const zoomInBtn = qs('#zoomIn');
 const zoomOutBtn = qs('#zoomOut');
 const fitBtn = qs('#fit');
@@ -238,6 +239,12 @@ themeSel.addEventListener('change', async () => {
   render();
 });
 
+structureSel.addEventListener('change', async () => {
+  await chrome.storage.local.set({ structure: structureSel.value });
+  initMermaid(themeSel.value);
+  render();
+});
+
 zoomInBtn.addEventListener('click', () => zoomAroundCenter(1.1));
 zoomOutBtn.addEventListener('click', () => zoomAroundCenter(1/1.1));
 fitBtn.addEventListener('click', () => { fitToView(); updateMinimap(); });
@@ -378,10 +385,29 @@ function resolveTheme(val) {
   return val || 'default';
 }
 
+function getStructureConfig(val) {
+  switch (val) {
+    case 'compact':
+      return { htmlLabels: true, diagramPadding: 4, nodeSpacing: 25, rankSpacing: 25, curve: 'basis' };
+    case 'spacious':
+      return { htmlLabels: true, diagramPadding: 16, nodeSpacing: 60, rankSpacing: 60, curve: 'basis' };
+    case 'curved':
+      return { htmlLabels: true, diagramPadding: 8, nodeSpacing: 40, rankSpacing: 40, curve: 'cardinal' };
+    case 'angular':
+      return { htmlLabels: true, diagramPadding: 8, nodeSpacing: 40, rankSpacing: 40, curve: 'linear' };
+    case 'minimal':
+      return { htmlLabels: true, diagramPadding: 2, nodeSpacing: 30, rankSpacing: 35, curve: 'linear' };
+    case 'dense':
+      return { htmlLabels: true, diagramPadding: 6, nodeSpacing: 20, rankSpacing: 20, curve: 'basis' };
+    default:
+      return { htmlLabels: true, diagramPadding: 8, nodeSpacing: 40, rankSpacing: 40, curve: 'basis' };
+  }
+}
+
 function getMermaidThemeConfig(val) {
   const isSysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const font = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"';
-  const baseFlow = { htmlLabels: true, diagramPadding: 8, nodeSpacing: 40, rankSpacing: 40, curve: 'basis' };
+  const baseFlow = getStructureConfig(structureSel?.value || 'default');
 
   const mk = (theme, isDark, vars = {}) => ({ theme, isDark, themeVariables: { fontFamily: font, ...vars }, flowchart: baseFlow });
 
@@ -809,8 +835,9 @@ async function restoreLayout() {
 }
 
 async function restorePreferences() {
-  const { theme, alwaysOnTop } = await chrome.storage.local.get(['theme', 'alwaysOnTop']);
+  const { theme, structure, alwaysOnTop } = await chrome.storage.local.get(['theme', 'structure', 'alwaysOnTop']);
   if (theme) themeSel.value = theme;
+  if (structure) structureSel.value = structure;
   if (typeof alwaysOnTop === 'boolean') ontopChk.checked = alwaysOnTop;
   applyAlwaysOnTop();
 }
