@@ -14,10 +14,14 @@ chrome.runtime.onInstalled.addListener(() => {
     return m ? m[1] : text;
   }
 
-  // Remove parentheses and replace pipe characters in the selected code
+  // Remove parentheses, replace pipe characters, and normalize accented Latin characters
   function cleanSelectedCode(text) {
     if (!text) return text;
-    return text.replace(/[()]/g, '').replace(/\|/g, '-');
+    return text
+      .replace(/[()]/g, '')
+      .replace(/\|/g, '-')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   }
   
   function safeUUID() {
