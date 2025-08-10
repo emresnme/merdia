@@ -14,14 +14,10 @@ chrome.runtime.onInstalled.addListener(() => {
     return m ? m[1] : text;
   }
 
-  // Remove normal parentheses inside square-bracket labels, e.g.
-  // PP[Post-processing<br/>(re-ranking, cleaning)] -> PP[Post-processing<br/>re-ranking, cleaning]
-  function normalizeBracketLabelParens(text) {
+  // Remove parentheses and replace pipe characters in the selected code
+  function cleanSelectedCode(text) {
     if (!text) return text;
-    return text.replace(/\[([^\[\]]*)\]/g, (full, inner) => {
-      const cleaned = inner.replace(/\(([^()]*)\)/g, '$1');
-      return `[${cleaned}]`;
-    });
+    return text.replace(/[()]/g, '').replace(/\|/g, '-');
   }
   
   function safeUUID() {
@@ -35,17 +31,25 @@ chrome.runtime.onInstalled.addListener(() => {
     if (!tab || !tab.id) return;
   
     try {
-      // Always read selection directly from the page (reliable for large selections)
-      const [{ result: selectedFromPage } = {}] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => (window.getSelection && window.getSelection().toString()) || ""
-      });
+      let selectedFromPage = "";
+      
+      try {
+        // Try to read selection directly from the page (reliable for large selections)
+        const [{ result } = {}] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => (window.getSelection && window.getSelection().toString()) || ""
+        });
+        selectedFromPage = result || "";
+      } catch (scriptError) {
+        // Script injection blocked by policy - fall back to context menu selection
+        console.warn("Script injection blocked, using context menu selection:", scriptError.message);
+      }
   
       const selection = (selectedFromPage || info.selectionText || "").trim();
       if (!selection) return;
   
       const rawCode = stripFences(selection);
-      const code = normalizeBracketLabelParens(rawCode);
+      const code = cleanSelectedCode(rawCode);
       const id = safeUUID();
   
       // Store in session storage (ephemeral). Keyed by id.
