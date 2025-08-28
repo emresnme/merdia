@@ -77,6 +77,18 @@ async function getCodeFromSession() {
   const id = decodeURIComponent(location.hash.slice(1));
   if (!id) throw new Error('No code ID in URL hash.');
 
+  // Fallback for testing outside extension context
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    // Return test data
+    const testMermaidCode = `graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Process]
+    B -->|No| D[End]
+    C --> E[Another Step]
+    E --> D`;
+    return testMermaidCode;
+  }
+
   const data = await chrome.storage.session.get(id);
   const value = data[id];
   // Clean up after reading to keep session storage small
@@ -238,7 +250,11 @@ rerenderBtn.addEventListener('click', () => {
 
 exportBtn.addEventListener('click', exportSVG);
 themeSel.addEventListener('change', async () => {
-  await chrome.storage.local.set({ theme: themeSel.value });
+  try {
+    if (chrome?.storage?.local) {
+      await chrome.storage.local.set({ theme: themeSel.value });
+    }
+  } catch (_) {}
   initMermaid(themeSel.value);
   // Recolor code overlay if needed (mainly for dark/light backgrounds)
   scheduleHighlightUpdate();
@@ -246,7 +262,11 @@ themeSel.addEventListener('change', async () => {
 });
 
 structureSel.addEventListener('change', async () => {
-  await chrome.storage.local.set({ structure: structureSel.value });
+  try {
+    if (chrome?.storage?.local) {
+      await chrome.storage.local.set({ structure: structureSel.value });
+    }
+  } catch (_) {}
   initMermaid(themeSel.value);
   render();
 });
@@ -276,7 +296,11 @@ openSideBtn.addEventListener('click', async () => {
 });
 
 ontopChk.addEventListener('change', async () => {
-  await chrome.storage.local.set({ alwaysOnTop: ontopChk.checked });
+  try {
+    if (chrome?.storage?.local) {
+      await chrome.storage.local.set({ alwaysOnTop: ontopChk.checked });
+    }
+  } catch (_) {}
   applyAlwaysOnTop();
 });
 
@@ -286,7 +310,11 @@ if (lintToggle) {
     if (lintPanel) {
       lintPanel.classList.toggle('collapsed');
       // Save collapsed state
-      chrome.storage.local.set({ lintCollapsed: lintPanel.classList.contains('collapsed') });
+      try {
+        if (chrome?.storage?.local) {
+          chrome.storage.local.set({ lintCollapsed: lintPanel.classList.contains('collapsed') });
+        }
+      } catch (_) {}
     }
   });
 }
@@ -1157,7 +1185,11 @@ function onStartResize(e) {
     // Persist ratio
     const leftW = content.children[0].getBoundingClientRect().width;
     const ratio = leftW / rect.width;
-    chrome.storage.local.set({ splitRatio: ratio });
+    try {
+      if (chrome?.storage?.local) {
+        chrome.storage.local.set({ splitRatio: ratio });
+      }
+    } catch (_) {}
   }
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
@@ -1166,12 +1198,30 @@ function onStartResize(e) {
 function resetSplit() {
   const content = document.getElementById('content');
   content.style.gridTemplateColumns = '';
-  chrome.storage.local.remove('splitRatio');
+  try {
+    if (chrome?.storage?.local) {
+      chrome.storage.local.remove('splitRatio');
+    }
+  } catch (_) {}
 }
 
 async function restoreLayout() {
   const content = document.getElementById('content');
-  const { splitRatio, codeCollapsed, lintCollapsed } = await chrome.storage.local.get(['splitRatio', 'codeCollapsed', 'lintCollapsed']);
+  
+  let splitRatio, codeCollapsed, lintCollapsed;
+  
+  // Fallback for testing outside extension context
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    splitRatio = null;
+    codeCollapsed = false;
+    lintCollapsed = false;
+  } else {
+    const data = await chrome.storage.local.get(['splitRatio', 'codeCollapsed', 'lintCollapsed']);
+    splitRatio = data.splitRatio;
+    codeCollapsed = data.codeCollapsed;
+    lintCollapsed = data.lintCollapsed;
+  }
+  
   if (content && typeof codeCollapsed === 'boolean') {
     if (codeCollapsed) content.classList.add('collapsed');
     else content.classList.remove('collapsed');
@@ -1194,7 +1244,19 @@ async function restoreLayout() {
 }
 
 async function restorePreferences() {
-  const { theme, structure, alwaysOnTop } = await chrome.storage.local.get(['theme', 'structure', 'alwaysOnTop']);
+  let theme, structure, alwaysOnTop;
+  
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    theme = 'auto';
+    structure = 'default';
+    alwaysOnTop = false;
+  } else {
+    const data = await chrome.storage.local.get(['theme', 'structure', 'alwaysOnTop']);
+    theme = data.theme;
+    structure = data.structure;
+    alwaysOnTop = data.alwaysOnTop;
+  }
+  
   if (theme) themeSel.value = theme;
   if (structure) structureSel.value = structure;
   if (typeof alwaysOnTop === 'boolean') ontopChk.checked = alwaysOnTop;
@@ -1203,13 +1265,16 @@ async function restorePreferences() {
 
 function setupWindowInfo() {
   return new Promise((resolve) => {
-    if (!chrome.windows || !chrome.windows.getCurrent) return resolve();
+    if (typeof chrome === 'undefined' || !chrome.windows || !chrome.windows.getCurrent) return resolve();
     chrome.windows.getCurrent((w) => { currentWindowId = w && w.id; resolve(); });
   });
 }
 
 function getCurrentWindow() {
-  return new Promise((resolve) => chrome.windows.getCurrent(resolve));
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.windows) return resolve();
+    chrome.windows.getCurrent(resolve);
+  });
 }
 
 function openRightPopup(url) {
@@ -1224,8 +1289,17 @@ function openRightPopup(url) {
 async function storeCurrentCodeAndGetUrl() {
   const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const sanitized = normalizeBracketLabelParens(code);
-  await chrome.storage.session.set({ [id]: sanitized });
-  return chrome.runtime.getURL(`viewer.html#${encodeURIComponent(id)}`);
+  
+  try {
+    if (chrome?.storage?.session) {
+      await chrome.storage.session.set({ [id]: sanitized });
+    }
+  } catch (_) {}
+  
+  if (chrome?.runtime?.getURL) {
+    return chrome.runtime.getURL(`viewer.html#${encodeURIComponent(id)}`);
+  }
+  return `viewer.html#${encodeURIComponent(id)}`;
 }
 
 function applyAlwaysOnTop() {
@@ -1248,6 +1322,10 @@ function savePopupSize() {
   const width = window.outerWidth || document.documentElement.clientWidth || window.innerWidth;
   const height = window.outerHeight || document.documentElement.clientHeight || window.innerHeight;
   if (width && height) {
-    chrome.storage.local.set({ popupSize: { width, height } });
+    try {
+      if (chrome?.storage?.local) {
+        chrome.storage.local.set({ popupSize: { width, height } });
+      }
+    } catch (_) {}
   }
 }
