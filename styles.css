@@ -315,4 +315,152 @@ html, body, #app { height: 100%; margin: 0; font-family: system-ui, -apple-syste
 .syntax .tok-number { color: #b45309; }
 [data-theme="dark"] .syntax .tok-number { color: #f59e0b; }
 
+/* Lint Panel */
+.lint-panel {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  transition: height 0.2s ease;
+  overflow: hidden;
+}
+.lint-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.lint-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lint-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.lint-toggle:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.lint-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+}
+.lint-panel.collapsed .lint-toggle svg {
+  transform: rotate(-90deg);
+}
+.lint-panel.collapsed .lint-results {
+  display: none;
+}
+.lint-results {
+  max-height: 150px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.lint-results::-webkit-scrollbar {
+  width: 6px;
+}
+.lint-results::-webkit-scrollbar-track {
+  background: var(--panel);
+}
+.lint-results::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.lint-issue {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.4;
+  transition: background 0.15s ease;
+}
+.lint-issue:hover {
+  background: color-mix(in srgb, var(--panel) 95%, var(--accent) 5%);
+}
+.lint-issue:last-child {
+  border-bottom: none;
+}
+.lint-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+.lint-icon.error {
+  color: #dc2626;
+}
+.lint-icon.warning {
+  color: #d97706;
+}
+.lint-icon.info {
+  color: #2563eb;
+}
+[data-theme="dark"] .lint-icon.error { color: #f87171; }
+[data-theme="dark"] .lint-icon.warning { color: #fbbf24; }
+[data-theme="dark"] .lint-icon.info { color: #60a5fa; }
+.lint-content {
+  flex: 1;
+  min-width: 0;
+}
+.lint-message {
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.lint-location {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.lint-suggestion {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+}
+.lint-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.lint-fix-btn {
+  padding: 2px 6px;
+  font-size: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--accent);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.lint-fix-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.lint-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
 body { background: var(--bg); color: var(--text); }

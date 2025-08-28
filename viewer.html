@@ -88,6 +88,17 @@
       </div>
       <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize editor"></div>
       <div id="codeWrap" class="code-wrap">
+        <div id="lintPanel" class="lint-panel" aria-live="polite" aria-label="Mermaid code analysis">
+          <div id="lintHeader" class="lint-header">
+            <span class="lint-title">Code Analysis</span>
+            <button id="lintToggle" type="button" class="lint-toggle" aria-label="Toggle lint panel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+          <div id="lintResults" class="lint-results"></div>
+        </div>
         <pre id="codeHighlight" class="syntax" aria-hidden="true"></pre>
         <textarea id="raw" spellcheck="false" wrap="off" aria-label="Mermaid source"></textarea>
       </div>
