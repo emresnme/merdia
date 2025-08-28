@@ -138,10 +138,24 @@ function render() {
       if (lastSvg) {
         const vb = lastSvg.viewBox && lastSvg.viewBox.baseVal;
         let w = 0, h = 0;
-        if (vb) { w = vb.width; h = vb.height; }
-        else {
-          const bcr = lastSvg.getBoundingClientRect();
-          w = bcr.width; h = bcr.height;
+        if (vb && isFinite(vb.width) && isFinite(vb.height)) {
+          w = vb.width; h = vb.height;
+        } else {
+          try {
+            const bcr = lastSvg.getBoundingClientRect && lastSvg.getBoundingClientRect();
+            if (bcr && isFinite(bcr.width) && isFinite(bcr.height) && (bcr.width > 0 || bcr.height > 0)) {
+              w = bcr.width; h = bcr.height;
+            } else if (lastSvg.getBBox) {
+              const bb = lastSvg.getBBox();
+              if (bb && isFinite(bb.width) && isFinite(bb.height)) { w = bb.width; h = bb.height; }
+            }
+          } catch (_) {
+            // ignore and fallback below
+          }
+        }
+        // Final fallback to avoid NaN/0 sizes
+        if (!isFinite(w) || !isFinite(h) || (w === 0 && h === 0)) {
+          w = 100; h = 100;
         }
         lastSvgSize = { w, h };
         // Preserve transform if already set, otherwise fit initially
@@ -195,6 +209,11 @@ function initMermaid(theme = 'default') {
     // If not dark, remove attribute for light to use default vars
     document.documentElement.removeAttribute('data-theme');
   }
+  // Guard against calling before Mermaid is loaded
+  if (!mermaid || typeof mermaid.initialize !== 'function') {
+    setStatus('Mermaid not loaded yet');
+    return;
+  }
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'loose', // allows links & HTML labels; use 'strict' if you prefer
@@ -209,6 +228,10 @@ async function main() {
     setStatus('Loading…');
     await setupWindowInfo();
     await restoreLayout();
+    // Initialize lint panel state after the controller is defined
+    if (typeof LintController !== 'undefined' && LintController.initializePanel) {
+      await LintController.initializePanel();
+    }
     await restorePreferences();
     code = await getCodeFromSession();
     code = normalizeBracketLabelParens(code);
@@ -305,8 +328,6 @@ ontopChk.addEventListener('change', async () => {
 });
 
 // Lint panel event handlers
-// Initialize lint panel state
-LintController.initializePanel();
 
 // Lint panel toggle
 if (lintToggle) {
@@ -331,7 +352,7 @@ if (lintResults) {
   });
 }
 
-// Kick off
+// Kick off moved to bottom after controllers are defined
 main();
 
 // --------- Helpers & new features ---------
