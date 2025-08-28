@@ -305,21 +305,22 @@ ontopChk.addEventListener('change', async () => {
 });
 
 // Lint panel event handlers
+// Initialize lint panel state
+LintController.initializePanel();
+
+// Lint panel toggle
 if (lintToggle) {
   lintToggle.addEventListener('click', () => {
     if (lintPanel) {
       lintPanel.classList.toggle('collapsed');
-      // Save collapsed state
-      try {
-        if (chrome?.storage?.local) {
-          chrome.storage.local.set({ lintCollapsed: lintPanel.classList.contains('collapsed') });
-        }
-      } catch (_) {}
+      const isCollapsed = lintPanel.classList.contains('collapsed');
+      LintController.savePanelState(isCollapsed);
     }
   });
 }
 
 // Quick fix button delegation
+// Quick fix button handler
 if (lintResults) {
   lintResults.addEventListener('click', (e) => {
     if (e.target.classList.contains('lint-fix-btn')) {
@@ -336,331 +337,588 @@ main();
 // --------- Helpers & new features ---------
 
 // ---------- Mermaid Lint Analysis ----------
-function levenshteinDistance(str1, str2) {
-  const matrix = [];
-  
-  for (let i = 0; i <= str2.length; i++) {
-    matrix[i] = [i];
-  }
-  
-  for (let j = 0; j <= str1.length; j++) {
-    matrix[0][j] = j;
-  }
-  
-  for (let i = 1; i <= str2.length; i++) {
-    for (let j = 1; j <= str1.length; j++) {
-      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-  
-  return matrix[str2.length][str1.length];
-}
+// ========== MERMAID LINT ANALYSIS SYSTEM ==========
 
-function analyzeMermaidCode(code) {
-  const issues = [];
-  if (!code || !code.trim()) return issues;
-  
-  const lines = code.split(/\r?\n/);
-  const nodes = new Set();
-  const referencedNodes = new Set();
-  const subgraphStack = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const lineNum = i + 1;
-    
-    // Skip empty lines and comments
-    if (!line || line.startsWith('%%')) continue;
-    
-    // Check for graph direction
-    const directionMatch = line.match(/^(graph|flowchart)\s+([A-Z]{1,2})\b/i);
-    if (directionMatch) {
-      const direction = directionMatch[2].toUpperCase();
-      const validDirections = ['TD', 'TB', 'BT', 'RL', 'LR'];
-      if (!validDirections.includes(direction)) {
-        issues.push({
-          type: 'unknown-direction',
-          line: lineNum,
-          column: line.indexOf(directionMatch[2]) + 1,
-          message: `Unknown direction "${direction}". Valid directions are: ${validDirections.join(', ')}`,
-          suggestion: `Change "${direction}" to one of: ${validDirections.join(', ')}`,
-          quickFix: {
-            type: 'replace',
-            text: direction,
-            replacements: validDirections
-          }
-        });
-      }
-    }
-    
-    // Check for subgraph start/end
-    if (line.match(/^\s*subgraph\b/i)) {
-      subgraphStack.push(lineNum);
-    } else if (line.match(/^\s*end\s*$/i)) {
-      if (subgraphStack.length === 0) {
-        issues.push({
-          type: 'unexpected-end',
-          line: lineNum,
-          column: 1,
-          message: 'Unexpected "end" statement - no matching subgraph',
-          suggestion: 'Remove this "end" statement or add a matching subgraph'
-        });
-      } else {
-        subgraphStack.pop();
-      }
-    }
-    
-    // Extract node definitions and references
-    const nodeDefMatch = line.match(/^\s*([A-Za-z0-9_]+)\s*[\[\(]/);
-    if (nodeDefMatch) {
-      nodes.add(nodeDefMatch[1]);
-    }
-    
-    // Extract simple node definitions (nodes defined implicitly in edges)
-    const allNodeMatches = line.matchAll(/\b([A-Za-z0-9_]+)\b/g);
-    for (const match of allNodeMatches) {
-      const nodeId = match[1];
-      // Skip keywords and directions
-      if (!['graph', 'flowchart', 'subgraph', 'end', 'TD', 'TB', 'BT', 'RL', 'LR'].includes(nodeId)) {
-        nodes.add(nodeId);
-      }
-    }
-    
-    // Extract edges and node references
-    const edgeMatches = line.matchAll(/([A-Za-z0-9_]+)\s*(?:-->|---|\.-\.|===>|\|\|[^\|]*\|\||[^=\-](?:-+>|=+>))/g);
-    for (const match of edgeMatches) {
-      referencedNodes.add(match[1]);
-    }
-    
-    // Extract target nodes from edges
-    const targetMatches = line.matchAll(/(?:-->|---|\.-\.|===>|\|\|[^\|]*\|\||[^=\-](?:-+>|=+>))\s*([A-Za-z0-9_]+)/g);
-    for (const match of targetMatches) {
-      referencedNodes.add(match[1]);
-    }
+/**
+ * Configuration constants for lint analysis
+ */
+const LINT_CONFIG = {
+  VALID_DIRECTIONS: ['TD', 'TB', 'BT', 'RL', 'LR'],
+  MERMAID_KEYWORDS: ['graph', 'flowchart', 'subgraph', 'end', 'TD', 'TB', 'BT', 'RL', 'LR'],
+  TYPO_DETECTION: {
+    MAX_DISTANCE: 2,
+    MAX_LENGTH_DIFF: 2,
+    MIN_NODE_LENGTH: 2
+  },
+  PATTERNS: {
+    DIRECTION: /^(graph|flowchart)\s+([A-Z]{1,2})\b/i,
+    SUBGRAPH_START: /^\s*subgraph\b/i,
+    SUBGRAPH_END: /^\s*end\s*$/i,
+    NODE_DEFINITION: /^\s*([A-Za-z0-9_]+)\s*[\[\(]/,
+    NODE_REFERENCE: /\b([A-Za-z0-9_]+)\b/g,
+    EDGE_SOURCE: /([A-Za-z0-9_]+)\s*(?:-->|---|\.-\.|===>|\|\|[^\|]*\|\||[^=\-](?:-+>|=+>))/g,
+    EDGE_TARGET: /(?:-->|---|\.-\.|===>|\|\|[^\|]*\|\||[^=\-](?:-+>|=+>))\s*([A-Za-z0-9_]+)/g
   }
-  
-  // Check for missing subgraph ends
-  if (subgraphStack.length > 0) {
+};
+
+/**
+ * Utility functions for lint analysis
+ */
+const LintUtils = {
+  /**
+   * Calculate Levenshtein distance between two strings
+   */
+  levenshteinDistance(str1, str2) {
+    const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(0));
+    
+    // Initialize first row and column
+    for (let i = 0; i <= str2.length; i++) matrix[i][0] = i;
+    for (let j = 0; j <= str1.length; j++) matrix[0][j] = j;
+    
+    // Fill the matrix
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          );
+        }
+      }
+    }
+    
+    return matrix[str2.length][str1.length];
+  },
+
+  /**
+   * Create a standardized lint issue object
+   */
+  createIssue(type, line, column, message, suggestion = null, quickFix = null) {
+    return { type, line, column, message, suggestion, quickFix };
+  },
+
+  /**
+   * Check if a string is a Mermaid keyword
+   */
+  isKeyword(text) {
+    return LINT_CONFIG.MERMAID_KEYWORDS.includes(text);
+  },
+
+  /**
+   * Check if two nodes are similar enough to be potential typos
+   */
+  areSimilarNodes(node1, node2) {
+    const { MAX_DISTANCE, MAX_LENGTH_DIFF } = LINT_CONFIG.TYPO_DETECTION;
+    const distance = this.levenshteinDistance(node1.toLowerCase(), node2.toLowerCase());
+    const lengthDiff = Math.abs(node1.length - node2.length);
+    
+    return distance <= MAX_DISTANCE && lengthDiff <= MAX_LENGTH_DIFF;
+  }
+};
+
+/**
+ * Individual analyzers for different types of lint issues
+ */
+const LintAnalyzers = {
+  /**
+   * Analyze graph direction declarations
+   */
+  analyzeDirections(lines) {
+    const issues = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const lineNum = i + 1;
+      
+      if (!line || line.startsWith('%%')) continue;
+      
+      const match = line.match(LINT_CONFIG.PATTERNS.DIRECTION);
+      if (match) {
+        const direction = match[2].toUpperCase();
+        if (!LINT_CONFIG.VALID_DIRECTIONS.includes(direction)) {
+          const column = line.indexOf(match[2]) + 1;
+          const message = `Unknown direction "${direction}". Valid directions are: ${LINT_CONFIG.VALID_DIRECTIONS.join(', ')}`;
+          const suggestion = `Change "${direction}" to one of: ${LINT_CONFIG.VALID_DIRECTIONS.join(', ')}`;
+          
+          issues.push(LintUtils.createIssue(
+            'unknown-direction',
+            lineNum,
+            column,
+            message,
+            suggestion,
+            {
+              type: 'replace',
+              text: direction,
+              replacements: LINT_CONFIG.VALID_DIRECTIONS
+            }
+          ));
+        }
+      }
+    }
+    
+    return issues;
+  },
+
+  /**
+   * Analyze subgraph structure for missing end statements
+   */
+  analyzeSubgraphs(lines) {
+    const issues = [];
+    const subgraphStack = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const lineNum = i + 1;
+      
+      if (!line || line.startsWith('%%')) continue;
+      
+      if (LINT_CONFIG.PATTERNS.SUBGRAPH_START.test(line)) {
+        subgraphStack.push(lineNum);
+      } else if (LINT_CONFIG.PATTERNS.SUBGRAPH_END.test(line)) {
+        if (subgraphStack.length === 0) {
+          issues.push(LintUtils.createIssue(
+            'unexpected-end',
+            lineNum,
+            1,
+            'Unexpected "end" statement - no matching subgraph',
+            'Remove this "end" statement or add a matching subgraph'
+          ));
+        } else {
+          subgraphStack.pop();
+        }
+      }
+    }
+    
+    // Check for unclosed subgraphs
     for (const startLine of subgraphStack) {
-      issues.push({
-        type: 'missing-end',
-        line: startLine,
-        column: 1,
-        message: 'Subgraph is missing closing "end" statement',
-        suggestion: 'Add "end" statement to close this subgraph',
-        quickFix: {
+      issues.push(LintUtils.createIssue(
+        'missing-end',
+        startLine,
+        1,
+        'Subgraph is missing closing "end" statement',
+        'Add "end" statement to close this subgraph',
+        {
           type: 'add-end',
           afterLine: lines.length
         }
-      });
+      ));
     }
-  }
-  
-  // Check for dangling edges - simplified to avoid false positives
-  // Only check for obvious cases like typos in common node patterns
-  for (const nodeRef of referencedNodes) {
-    // Skip if node exists or if it's a common pattern that might be valid
-    if (nodes.has(nodeRef) || nodeRef.length < 2) continue;
     
-    // Only flag if the node name looks like it might be a typo
-    // (e.g., contains obvious typo patterns or is very similar to an existing node)
-    let isPossibleTypo = false;
-    for (const existingNode of nodes) {
-      // Check if nodes are very similar (1-2 character difference)
-      const distance = levenshteinDistance(nodeRef.toLowerCase(), existingNode.toLowerCase());
-      if (distance <= 2 && Math.abs(nodeRef.length - existingNode.length) <= 2) {
-        isPossibleTypo = true;
-        break;
+    return issues;
+  },
+
+  /**
+   * Extract all node definitions and references from the code
+   */
+  extractNodes(lines) {
+    const nodes = new Set();
+    const referencedNodes = new Set();
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('%%')) continue;
+      
+      // Extract explicit node definitions
+      const nodeDefMatch = trimmed.match(LINT_CONFIG.PATTERNS.NODE_DEFINITION);
+      if (nodeDefMatch) {
+        nodes.add(nodeDefMatch[1]);
+      }
+      
+      // Extract all potential node references
+      const allMatches = trimmed.matchAll(LINT_CONFIG.PATTERNS.NODE_REFERENCE);
+      for (const match of allMatches) {
+        const nodeId = match[1];
+        if (!LintUtils.isKeyword(nodeId)) {
+          nodes.add(nodeId);
+        }
+      }
+      
+      // Extract nodes from edge definitions
+      const edgeSourceMatches = trimmed.matchAll(LINT_CONFIG.PATTERNS.EDGE_SOURCE);
+      for (const match of edgeSourceMatches) {
+        referencedNodes.add(match[1]);
+      }
+      
+      const edgeTargetMatches = trimmed.matchAll(LINT_CONFIG.PATTERNS.EDGE_TARGET);
+      for (const match of edgeTargetMatches) {
+        referencedNodes.add(match[1]);
       }
     }
     
-    if (isPossibleTypo) {
-      // Find the line where this node is referenced
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.includes(nodeRef)) {
-          issues.push({
-            type: 'dangling-edge',
-            line: i + 1,
-            column: line.indexOf(nodeRef) + 1,
-            message: `Node "${nodeRef}" might be a typo - similar to existing nodes`,
-            suggestion: `Check for typos in node name "${nodeRef}"`,
-            quickFix: {
-              type: 'define-node',
-              nodeId: nodeRef
-            }
-          });
+    return { nodes, referencedNodes };
+  },
+
+  /**
+   * Analyze for potential typos in node references
+   */
+  analyzeTypos(lines, nodes, referencedNodes) {
+    const issues = [];
+    const { MIN_NODE_LENGTH } = LINT_CONFIG.TYPO_DETECTION;
+    
+    for (const nodeRef of referencedNodes) {
+      // Skip if node exists, is too short, or is a keyword
+      if (nodes.has(nodeRef) || nodeRef.length < MIN_NODE_LENGTH || LintUtils.isKeyword(nodeRef)) {
+        continue;
+      }
+      
+      // Check for similar existing nodes
+      let isPossibleTypo = false;
+      for (const existingNode of nodes) {
+        if (LintUtils.areSimilarNodes(nodeRef, existingNode)) {
+          isPossibleTypo = true;
           break;
         }
       }
+      
+      if (isPossibleTypo) {
+        // Find the line where this node is referenced
+        const lineIndex = lines.findIndex(line => line.includes(nodeRef));
+        if (lineIndex !== -1) {
+          const line = lines[lineIndex];
+          issues.push(LintUtils.createIssue(
+            'dangling-edge',
+            lineIndex + 1,
+            line.indexOf(nodeRef) + 1,
+            `Node "${nodeRef}" might be a typo - similar to existing nodes`,
+            `Check for typos in node name "${nodeRef}"`,
+            {
+              type: 'define-node',
+              nodeId: nodeRef
+            }
+          ));
+        }
+      }
     }
+    
+    return issues;
   }
-  
-  return issues;
+};
+
+/**
+ * Main lint analysis engine
+ */
+const MermaidLint = {
+  /**
+   * Analyze Mermaid code and return list of issues
+   */
+  analyze(code) {
+    if (!code || !code.trim()) return [];
+    
+    const lines = code.split(/\r?\n/);
+    const issues = [];
+    
+    // Run individual analyzers
+    issues.push(...LintAnalyzers.analyzeDirections(lines));
+    issues.push(...LintAnalyzers.analyzeSubgraphs(lines));
+    
+    // Extract node information for typo analysis
+    const { nodes, referencedNodes } = LintAnalyzers.extractNodes(lines);
+    issues.push(...LintAnalyzers.analyzeTypos(lines, nodes, referencedNodes));
+    
+    return issues;
+  }
+};
+
+/**
+ * Main analysis function (public API)
+ */
+function analyzeMermaidCode(code) {
+  return MermaidLint.analyze(code);
 }
 
-function displayLintResults(issues) {
-  if (!lintResults) return;
-  
-  lintResults.innerHTML = '';
-  
-  if (issues.length === 0) {
-    lintResults.innerHTML = '<div class="lint-empty">No issues found ✓</div>';
-    return;
+// ========== MERMAID LINT UI SYSTEM ==========
+
+/**
+ * UI configuration and templates
+ */
+const LINT_UI_CONFIG = {
+  ISSUE_TYPES: {
+    'dangling-edge': { severity: 'error', icon: 'error' },
+    'unknown-direction': { severity: 'warning', icon: 'warning' },
+    'missing-end': { severity: 'warning', icon: 'warning' },
+    'unexpected-end': { severity: 'warning', icon: 'warning' }
+  },
+  EMPTY_MESSAGE: 'No issues found ✓',
+  LINE_HEIGHT_APPROX: 18
+};
+
+/**
+ * Icon definitions for different issue types
+ */
+const LintIcons = {
+  error: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>',
+  warning: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575L6.457 1.047zM8 5a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 8 5zM8 11a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>',
+  info: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75zM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>'
+};
+
+/**
+ * Quick fix button generators
+ */
+const QuickFixGenerators = {
+  replace(issue) {
+    return issue.quickFix.replacements.map(replacement => 
+      `<button class="lint-fix-btn" data-fix-type="replace" data-old-text="${escapeHtml(issue.quickFix.text)}" data-new-text="${escapeHtml(replacement)}" data-line="${issue.line}">
+        Fix: Use "${escapeHtml(replacement)}"
+      </button>`
+    ).join('');
+  },
+
+  'add-end'(issue) {
+    return `<button class="lint-fix-btn" data-fix-type="add-end" data-line="${issue.quickFix.afterLine}">
+      Add "end" statement
+    </button>`;
+  },
+
+  'define-node'(issue) {
+    return `<button class="lint-fix-btn" data-fix-type="define-node" data-node-id="${escapeHtml(issue.quickFix.nodeId)}" data-line="${issue.line}">
+      Define node "${escapeHtml(issue.quickFix.nodeId)}"
+    </button>`;
   }
-  
-  issues.forEach(issue => {
+};
+
+/**
+ * Quick fix handlers
+ */
+const QuickFixHandlers = {
+  replace(button, lines) {
+    const line = parseInt(button.getAttribute('data-line')) || 1;
+    const oldText = button.getAttribute('data-old-text');
+    const newText = button.getAttribute('data-new-text');
+    
+    if (line <= lines.length) {
+      lines[line - 1] = lines[line - 1].replace(oldText, newText);
+      return lines;
+    }
+    return lines;
+  },
+
+  'add-end'(button, lines) {
+    lines.push('end');
+    return lines;
+  },
+
+  'define-node'(button, lines) {
+    const line = parseInt(button.getAttribute('data-line')) || 1;
+    const nodeId = button.getAttribute('data-node-id');
+    const insertIndex = Math.max(0, line - 1);
+    
+    lines.splice(insertIndex, 0, `    ${nodeId}[${nodeId}]`);
+    return lines;
+  }
+};
+
+/**
+ * Main lint UI controller
+ */
+const LintUI = {
+  /**
+   * Display lint results in the UI
+   */
+  displayResults(issues) {
+    if (!lintResults) return;
+    
+    lintResults.innerHTML = '';
+    
+    if (issues.length === 0) {
+      this.showEmptyState();
+      return;
+    }
+    
+    issues.forEach(issue => this.createIssueElement(issue));
+  },
+
+  /**
+   * Show empty state (no issues found)
+   */
+  showEmptyState() {
+    lintResults.innerHTML = `<div class="lint-empty">${LINT_UI_CONFIG.EMPTY_MESSAGE}</div>`;
+  },
+
+  /**
+   * Create a single issue element
+   */
+  createIssueElement(issue) {
     const issueEl = document.createElement('div');
     issueEl.className = 'lint-issue';
     
-    const iconType = issue.type === 'dangling-edge' ? 'error' : 'warning';
-    const iconSvg = getIssueIcon(iconType);
+    const config = LINT_UI_CONFIG.ISSUE_TYPES[issue.type] || { icon: 'warning' };
+    const iconSvg = LintIcons[config.icon] || LintIcons.warning;
     
-    issueEl.innerHTML = `
+    issueEl.innerHTML = this.buildIssueHTML(issue, config.icon, iconSvg);
+    issueEl.addEventListener('click', () => this.jumpToLine(issue));
+    
+    lintResults.appendChild(issueEl);
+  },
+
+  /**
+   * Build HTML for an issue element
+   */
+  buildIssueHTML(issue, iconType, iconSvg) {
+    const suggestionHTML = issue.suggestion 
+      ? `<div class="lint-suggestion">${escapeHtml(issue.suggestion)}</div>` 
+      : '';
+    
+    const quickFixHTML = issue.quickFix 
+      ? `<div class="lint-actions">${this.buildQuickFixButtons(issue)}</div>` 
+      : '';
+    
+    return `
       <div class="lint-icon ${iconType}">
         ${iconSvg}
       </div>
       <div class="lint-content">
         <div class="lint-message">${escapeHtml(issue.message)}</div>
         <div class="lint-location">Line ${issue.line}, Column ${issue.column}</div>
-        ${issue.suggestion ? `<div class="lint-suggestion">${escapeHtml(issue.suggestion)}</div>` : ''}
-        ${issue.quickFix ? getQuickFixButtons(issue) : ''}
+        ${suggestionHTML}
+        ${quickFixHTML}
       </div>
     `;
-    
-    // Add click to jump to line
-    issueEl.addEventListener('click', () => {
-      if (rawEl) {
-        const lines = rawEl.value.split('\n');
-        let charPos = 0;
-        for (let i = 0; i < issue.line - 1; i++) {
-          charPos += lines[i].length + 1; // +1 for newline
-        }
-        charPos += issue.column - 1;
-        rawEl.focus();
-        rawEl.setSelectionRange(charPos, charPos);
-        rawEl.scrollTop = (issue.line - 1) * 18; // approximate line height
-      }
-    });
-    
-    lintResults.appendChild(issueEl);
-  });
-}
+  },
 
-function getIssueIcon(type) {
-  switch (type) {
-    case 'error':
-      return '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>';
-    case 'warning':
-      return '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575L6.457 1.047zM8 5a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 8 5zM8 11a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>';
-    case 'info':
-      return '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75zM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>';
-    default:
-      return '';
-  }
-}
+  /**
+   * Build quick fix buttons for an issue
+   */
+  buildQuickFixButtons(issue) {
+    const generator = QuickFixGenerators[issue.quickFix.type];
+    return generator ? generator(issue) : '';
+  },
 
-function getQuickFixButtons(issue) {
-  if (!issue.quickFix) return '';
-  
-  switch (issue.quickFix.type) {
-    case 'replace':
-      return `
-        <div class="lint-actions">
-          ${issue.quickFix.replacements.map(replacement => 
-            `<button class="lint-fix-btn" data-fix-type="replace" data-old-text="${escapeHtml(issue.quickFix.text)}" data-new-text="${escapeHtml(replacement)}" data-line="${issue.line}">
-              Fix: Use "${escapeHtml(replacement)}"
-            </button>`
-          ).join('')}
-        </div>
-      `;
-    case 'add-end':
-      return `
-        <div class="lint-actions">
-          <button class="lint-fix-btn" data-fix-type="add-end" data-line="${issue.quickFix.afterLine}">
-            Add "end" statement
-          </button>
-        </div>
-      `;
-    case 'define-node':
-      return `
-        <div class="lint-actions">
-          <button class="lint-fix-btn" data-fix-type="define-node" data-node-id="${escapeHtml(issue.quickFix.nodeId)}" data-line="${issue.line}">
-            Define node "${escapeHtml(issue.quickFix.nodeId)}"
-          </button>
-        </div>
-      `;
-    default:
-      return '';
+  /**
+   * Jump to the line/column of an issue in the editor
+   */
+  jumpToLine(issue) {
+    if (!rawEl) return;
+    
+    const lines = rawEl.value.split('\n');
+    let charPos = 0;
+    
+    // Calculate character position
+    for (let i = 0; i < issue.line - 1; i++) {
+      charPos += lines[i].length + 1; // +1 for newline
+    }
+    charPos += issue.column - 1;
+    
+    // Focus and position cursor
+    rawEl.focus();
+    rawEl.setSelectionRange(charPos, charPos);
+    rawEl.scrollTop = (issue.line - 1) * LINT_UI_CONFIG.LINE_HEIGHT_APPROX;
+  },
+
+  /**
+   * Apply a quick fix from a button click
+   */
+  applyQuickFix(button) {
+    const fixType = button.getAttribute('data-fix-type');
+    const handler = QuickFixHandlers[fixType];
+    
+    if (!handler || !rawEl) return;
+    
+    const lines = rawEl.value.split('\n');
+    const updatedLines = handler(button, lines);
+    
+    // Update the editor and trigger re-analysis
+    rawEl.value = updatedLines.join('\n');
+    code = rawEl.value;
+    scheduleHighlightUpdate();
+    scheduleLintUpdate();
   }
+};
+
+/**
+ * Public API functions (maintain backward compatibility)
+ */
+function displayLintResults(issues) {
+  LintUI.displayResults(issues);
 }
 
 function applyQuickFix(button) {
-  const fixType = button.getAttribute('data-fix-type');
-  const line = parseInt(button.getAttribute('data-line')) || 1;
-  
-  if (!rawEl) return;
-  
-  const lines = rawEl.value.split('\n');
-  
-  switch (fixType) {
-    case 'replace':
-      const oldText = button.getAttribute('data-old-text');
-      const newText = button.getAttribute('data-new-text');
-      if (line <= lines.length) {
-        lines[line - 1] = lines[line - 1].replace(oldText, newText);
-        rawEl.value = lines.join('\n');
-        code = rawEl.value;
-        scheduleHighlightUpdate();
-        scheduleLintUpdate();
-      }
-      break;
-      
-    case 'add-end':
-      lines.push('end');
-      rawEl.value = lines.join('\n');
-      code = rawEl.value;
-      scheduleHighlightUpdate();
-      scheduleLintUpdate();
-      break;
-      
-    case 'define-node':
-      const nodeId = button.getAttribute('data-node-id');
-      // Insert node definition before the line where it's referenced
-      const insertIndex = Math.max(0, line - 1);
-      lines.splice(insertIndex, 0, `    ${nodeId}[${nodeId}]`);
-      rawEl.value = lines.join('\n');
-      code = rawEl.value;
-      scheduleHighlightUpdate();
-      scheduleLintUpdate();
-      break;
-  }
+  LintUI.applyQuickFix(button);
 }
 
-let lintPending = false;
+// ========== LINT CONTROLLER ==========
+
+/**
+ * Lint update scheduling and coordination
+ */
+const LintController = {
+  _updatePending: false,
+
+  /**
+   * Schedule a lint update to be run on the next animation frame
+   */
+  scheduleUpdate() {
+    if (this._updatePending) return;
+    
+    this._updatePending = true;
+    requestAnimationFrame(() => {
+      this._updatePending = false;
+      this.updateResults();
+    });
+  },
+
+  /**
+   * Perform lint analysis and update UI
+   */
+  updateResults() {
+    if (!rawEl || !lintResults) return;
+    
+    const currentCode = rawEl.value || '';
+    const issues = analyzeMermaidCode(currentCode);
+    displayLintResults(issues);
+  },
+
+  /**
+   * Initialize lint panel state from storage
+   */
+  async initializePanel() {
+    if (!lintPanel) return;
+
+    try {
+      // Fallback for testing outside extension context
+      if (typeof chrome === 'undefined' || !chrome.storage) {
+        return;
+      }
+
+      const { lintCollapsed } = await chrome.storage.local.get(['lintCollapsed']);
+      if (lintCollapsed) {
+        lintPanel.classList.add('collapsed');
+      }
+    } catch (error) {
+      console.warn('Failed to initialize lint panel state:', error);
+    }
+  },
+
+  /**
+   * Save lint panel state to storage
+   */
+  async savePanelState(collapsed) {
+    try {
+      // Fallback for testing outside extension context
+      if (typeof chrome === 'undefined' || !chrome.storage) {
+        return;
+      }
+
+      await chrome.storage.local.set({ lintCollapsed: collapsed });
+    } catch (error) {
+      console.warn('Failed to save lint panel state:', error);
+    }
+  }
+};
+
+/**
+ * Public API functions for backward compatibility
+ */
+let lintPending = false; // Kept for backward compatibility
 
 function scheduleLintUpdate() {
-  if (lintPending) return;
-  lintPending = true;
-  requestAnimationFrame(() => {
-    lintPending = false;
-    updateLintResults();
-  });
+  LintController.scheduleUpdate();
 }
 
 function updateLintResults() {
-  if (!rawEl || !lintResults) return;
-  const currentCode = rawEl.value || '';
-  const issues = analyzeMermaidCode(currentCode);
-  displayLintResults(issues);
+  LintController.updateResults();
 }
 
 // ---------- Lightweight Mermaid syntax highlighting overlay ----------
@@ -1208,18 +1466,16 @@ function resetSplit() {
 async function restoreLayout() {
   const content = document.getElementById('content');
   
-  let splitRatio, codeCollapsed, lintCollapsed;
+  let splitRatio, codeCollapsed;
   
   // Fallback for testing outside extension context
   if (typeof chrome === 'undefined' || !chrome.storage) {
     splitRatio = null;
     codeCollapsed = false;
-    lintCollapsed = false;
   } else {
-    const data = await chrome.storage.local.get(['splitRatio', 'codeCollapsed', 'lintCollapsed']);
+    const data = await chrome.storage.local.get(['splitRatio', 'codeCollapsed']);
     splitRatio = data.splitRatio;
     codeCollapsed = data.codeCollapsed;
-    lintCollapsed = data.lintCollapsed;
   }
   
   if (content && typeof codeCollapsed === 'boolean') {
@@ -1229,10 +1485,9 @@ async function restoreLayout() {
   if (toggleCodeBtn && content) {
     toggleCodeBtn.setAttribute('aria-pressed', String(!content.classList.contains('collapsed')));
   }
-  if (lintPanel && typeof lintCollapsed === 'boolean') {
-    if (lintCollapsed) lintPanel.classList.add('collapsed');
-    else lintPanel.classList.remove('collapsed');
-  }
+  
+  // Lint panel state is now handled by LintController.initializePanel()
+  
   if (splitRatio && content && !content.classList.contains('collapsed')) {
     // Apply after first layout
     requestAnimationFrame(() => {
