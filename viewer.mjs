@@ -24,6 +24,9 @@ const openTabBtn = qs('#openTab');
 const openSideBtn = qs('#openSide');
 const toggleCodeBtn = qs('#toggleCode');
 const ontopChk = qs('#ontop');
+const lintPanel = qs('#lintPanel');
+const lintToggle = qs('#lintToggle');
+const lintResults = qs('#lintResults');
 
 let code = '';
 let renderCounter = 0; // unique id for export renders
@@ -200,6 +203,8 @@ async function main() {
     rawEl.value = code;
     // Initialize syntax highlight overlay
     if (codeHighlightEl) updateHighlight();
+    // Initialize lint analysis
+    if (lintResults) updateLintResults();
     // Load Mermaid ESM (with fallbacks) and initialize
     mermaid = await loadMermaid();
     initMermaid(themeSel.value || 'auto');
@@ -215,6 +220,7 @@ async function main() {
 rawEl.addEventListener('input', () => {
   code = rawEl.value;
   scheduleHighlightUpdate();
+  scheduleLintUpdate();
 });
 rawEl.addEventListener('scroll', syncHighlightScroll);
 rawEl.addEventListener('select', updateOverlaySelectionVisibility);
@@ -274,10 +280,360 @@ ontopChk.addEventListener('change', async () => {
   applyAlwaysOnTop();
 });
 
+// Lint panel event handlers
+if (lintToggle) {
+  lintToggle.addEventListener('click', () => {
+    if (lintPanel) {
+      lintPanel.classList.toggle('collapsed');
+      // Save collapsed state
+      chrome.storage.local.set({ lintCollapsed: lintPanel.classList.contains('collapsed') });
+    }
+  });
+}
+
+// Quick fix button delegation
+if (lintResults) {
+  lintResults.addEventListener('click', (e) => {
+    if (e.target.classList.contains('lint-fix-btn')) {
+      e.preventDefault();
+      e.stopPropagation();
+      applyQuickFix(e.target);
+    }
+  });
+}
+
 // Kick off
 main();
 
 // --------- Helpers & new features ---------
+
+// ---------- Mermaid Lint Analysis ----------
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+}
+
+function analyzeMermaidCode(code) {
+  const issues = [];
+  if (!code || !code.trim()) return issues;
+  
+  const lines = code.split(/\r?\n/);
+  const nodes = new Set();
+  const referencedNodes = new Set();
+  const subgraphStack = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const lineNum = i + 1;
+    
+    // Skip empty lines and comments
+    if (!line || line.startsWith('%%')) continue;
+    
+    // Check for graph direction
+    const directionMatch = line.match(/^(graph|flowchart)\s+([A-Z]{1,2})\b/i);
+    if (directionMatch) {
+      const direction = directionMatch[2].toUpperCase();
+      const validDirections = ['TD', 'TB', 'BT', 'RL', 'LR'];
+      if (!validDirections.includes(direction)) {
+        issues.push({
+          type: 'unknown-direction',
+          line: lineNum,
+          column: line.indexOf(directionMatch[2]) + 1,
+          message: `Unknown direction "${direction}". Valid directions are: ${validDirections.join(', ')}`,
+          suggestion: `Change "${direction}" to one of: ${validDirections.join(', ')}`,
+          quickFix: {
+            type: 'replace',
+            text: direction,
+            replacements: validDirections
+          }
+        });
+      }
+    }
+    
+    // Check for subgraph start/end
+    if (line.match(/^\s*subgraph\b/i)) {
+      subgraphStack.push(lineNum);
+    } else if (line.match(/^\s*end\s*$/i)) {
+      if (subgraphStack.length === 0) {
+        issues.push({
+          type: 'unexpected-end',
+          line: lineNum,
+          column: 1,
+          message: 'Unexpected "end" statement - no matching subgraph',
+          suggestion: 'Remove this "end" statement or add a matching subgraph'
+        });
+      } else {
+        subgraphStack.pop();
+      }
+    }
+    
+    // Extract node definitions and references
+    const nodeDefMatch = line.match(/^\s*([A-Za-z0-9_]+)\s*[\[\(]/);
+    if (nodeDefMatch) {
+      nodes.add(nodeDefMatch[1]);
+    }
+    
+    // Extract simple node definitions (nodes defined implicitly in edges)
+    const allNodeMatches = line.matchAll(/\b([A-Za-z0-9_]+)\b/g);
+    for (const match of allNodeMatches) {
+      const nodeId = match[1];
+      // Skip keywords and directions
+      if (!['graph', 'flowchart', 'subgraph', 'end', 'TD', 'TB', 'BT', 'RL', 'LR'].includes(nodeId)) {
+        nodes.add(nodeId);
+      }
+    }
+    
+    // Extract edges and node references
+    const edgeMatches = line.matchAll(/([A-Za-z0-9_]+)\s*(?:-->|---|\.-\.|===>|\|\|[^\|]*\|\||[^=\-](?:-+>|=+>))/g);
+    for (const match of edgeMatches) {
+      referencedNodes.add(match[1]);
+    }
+    
+    // Extract target nodes from edges
+    const targetMatches = line.matchAll(/(?:-->|---|\.-\.|===>|\|\|[^\|]*\|\||[^=\-](?:-+>|=+>))\s*([A-Za-z0-9_]+)/g);
+    for (const match of targetMatches) {
+      referencedNodes.add(match[1]);
+    }
+  }
+  
+  // Check for missing subgraph ends
+  if (subgraphStack.length > 0) {
+    for (const startLine of subgraphStack) {
+      issues.push({
+        type: 'missing-end',
+        line: startLine,
+        column: 1,
+        message: 'Subgraph is missing closing "end" statement',
+        suggestion: 'Add "end" statement to close this subgraph',
+        quickFix: {
+          type: 'add-end',
+          afterLine: lines.length
+        }
+      });
+    }
+  }
+  
+  // Check for dangling edges - simplified to avoid false positives
+  // Only check for obvious cases like typos in common node patterns
+  for (const nodeRef of referencedNodes) {
+    // Skip if node exists or if it's a common pattern that might be valid
+    if (nodes.has(nodeRef) || nodeRef.length < 2) continue;
+    
+    // Only flag if the node name looks like it might be a typo
+    // (e.g., contains obvious typo patterns or is very similar to an existing node)
+    let isPossibleTypo = false;
+    for (const existingNode of nodes) {
+      // Check if nodes are very similar (1-2 character difference)
+      const distance = levenshteinDistance(nodeRef.toLowerCase(), existingNode.toLowerCase());
+      if (distance <= 2 && Math.abs(nodeRef.length - existingNode.length) <= 2) {
+        isPossibleTypo = true;
+        break;
+      }
+    }
+    
+    if (isPossibleTypo) {
+      // Find the line where this node is referenced
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes(nodeRef)) {
+          issues.push({
+            type: 'dangling-edge',
+            line: i + 1,
+            column: line.indexOf(nodeRef) + 1,
+            message: `Node "${nodeRef}" might be a typo - similar to existing nodes`,
+            suggestion: `Check for typos in node name "${nodeRef}"`,
+            quickFix: {
+              type: 'define-node',
+              nodeId: nodeRef
+            }
+          });
+          break;
+        }
+      }
+    }
+  }
+  
+  return issues;
+}
+
+function displayLintResults(issues) {
+  if (!lintResults) return;
+  
+  lintResults.innerHTML = '';
+  
+  if (issues.length === 0) {
+    lintResults.innerHTML = '<div class="lint-empty">No issues found ✓</div>';
+    return;
+  }
+  
+  issues.forEach(issue => {
+    const issueEl = document.createElement('div');
+    issueEl.className = 'lint-issue';
+    
+    const iconType = issue.type === 'dangling-edge' ? 'error' : 'warning';
+    const iconSvg = getIssueIcon(iconType);
+    
+    issueEl.innerHTML = `
+      <div class="lint-icon ${iconType}">
+        ${iconSvg}
+      </div>
+      <div class="lint-content">
+        <div class="lint-message">${escapeHtml(issue.message)}</div>
+        <div class="lint-location">Line ${issue.line}, Column ${issue.column}</div>
+        ${issue.suggestion ? `<div class="lint-suggestion">${escapeHtml(issue.suggestion)}</div>` : ''}
+        ${issue.quickFix ? getQuickFixButtons(issue) : ''}
+      </div>
+    `;
+    
+    // Add click to jump to line
+    issueEl.addEventListener('click', () => {
+      if (rawEl) {
+        const lines = rawEl.value.split('\n');
+        let charPos = 0;
+        for (let i = 0; i < issue.line - 1; i++) {
+          charPos += lines[i].length + 1; // +1 for newline
+        }
+        charPos += issue.column - 1;
+        rawEl.focus();
+        rawEl.setSelectionRange(charPos, charPos);
+        rawEl.scrollTop = (issue.line - 1) * 18; // approximate line height
+      }
+    });
+    
+    lintResults.appendChild(issueEl);
+  });
+}
+
+function getIssueIcon(type) {
+  switch (type) {
+    case 'error':
+      return '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>';
+    case 'warning':
+      return '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575L6.457 1.047zM8 5a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 8 5zM8 11a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>';
+    case 'info':
+      return '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75zM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>';
+    default:
+      return '';
+  }
+}
+
+function getQuickFixButtons(issue) {
+  if (!issue.quickFix) return '';
+  
+  switch (issue.quickFix.type) {
+    case 'replace':
+      return `
+        <div class="lint-actions">
+          ${issue.quickFix.replacements.map(replacement => 
+            `<button class="lint-fix-btn" data-fix-type="replace" data-old-text="${escapeHtml(issue.quickFix.text)}" data-new-text="${escapeHtml(replacement)}" data-line="${issue.line}">
+              Fix: Use "${escapeHtml(replacement)}"
+            </button>`
+          ).join('')}
+        </div>
+      `;
+    case 'add-end':
+      return `
+        <div class="lint-actions">
+          <button class="lint-fix-btn" data-fix-type="add-end" data-line="${issue.quickFix.afterLine}">
+            Add "end" statement
+          </button>
+        </div>
+      `;
+    case 'define-node':
+      return `
+        <div class="lint-actions">
+          <button class="lint-fix-btn" data-fix-type="define-node" data-node-id="${escapeHtml(issue.quickFix.nodeId)}" data-line="${issue.line}">
+            Define node "${escapeHtml(issue.quickFix.nodeId)}"
+          </button>
+        </div>
+      `;
+    default:
+      return '';
+  }
+}
+
+function applyQuickFix(button) {
+  const fixType = button.getAttribute('data-fix-type');
+  const line = parseInt(button.getAttribute('data-line')) || 1;
+  
+  if (!rawEl) return;
+  
+  const lines = rawEl.value.split('\n');
+  
+  switch (fixType) {
+    case 'replace':
+      const oldText = button.getAttribute('data-old-text');
+      const newText = button.getAttribute('data-new-text');
+      if (line <= lines.length) {
+        lines[line - 1] = lines[line - 1].replace(oldText, newText);
+        rawEl.value = lines.join('\n');
+        code = rawEl.value;
+        scheduleHighlightUpdate();
+        scheduleLintUpdate();
+      }
+      break;
+      
+    case 'add-end':
+      lines.push('end');
+      rawEl.value = lines.join('\n');
+      code = rawEl.value;
+      scheduleHighlightUpdate();
+      scheduleLintUpdate();
+      break;
+      
+    case 'define-node':
+      const nodeId = button.getAttribute('data-node-id');
+      // Insert node definition before the line where it's referenced
+      const insertIndex = Math.max(0, line - 1);
+      lines.splice(insertIndex, 0, `    ${nodeId}[${nodeId}]`);
+      rawEl.value = lines.join('\n');
+      code = rawEl.value;
+      scheduleHighlightUpdate();
+      scheduleLintUpdate();
+      break;
+  }
+}
+
+let lintPending = false;
+
+function scheduleLintUpdate() {
+  if (lintPending) return;
+  lintPending = true;
+  requestAnimationFrame(() => {
+    lintPending = false;
+    updateLintResults();
+  });
+}
+
+function updateLintResults() {
+  if (!rawEl || !lintResults) return;
+  const currentCode = rawEl.value || '';
+  const issues = analyzeMermaidCode(currentCode);
+  displayLintResults(issues);
+}
 
 // ---------- Lightweight Mermaid syntax highlighting overlay ----------
 let highlightPending = false;
@@ -815,13 +1171,17 @@ function resetSplit() {
 
 async function restoreLayout() {
   const content = document.getElementById('content');
-  const { splitRatio, codeCollapsed } = await chrome.storage.local.get(['splitRatio', 'codeCollapsed']);
+  const { splitRatio, codeCollapsed, lintCollapsed } = await chrome.storage.local.get(['splitRatio', 'codeCollapsed', 'lintCollapsed']);
   if (content && typeof codeCollapsed === 'boolean') {
     if (codeCollapsed) content.classList.add('collapsed');
     else content.classList.remove('collapsed');
   }
   if (toggleCodeBtn && content) {
     toggleCodeBtn.setAttribute('aria-pressed', String(!content.classList.contains('collapsed')));
+  }
+  if (lintPanel && typeof lintCollapsed === 'boolean') {
+    if (lintCollapsed) lintPanel.classList.add('collapsed');
+    else lintPanel.classList.remove('collapsed');
   }
   if (splitRatio && content && !content.classList.contains('collapsed')) {
     // Apply after first layout
