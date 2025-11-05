@@ -251,11 +251,21 @@ async function main() {
   }
 }
 
+// Auto-render timer
+let autoRenderTimeout = null;
+
 // UI bindings
 rawEl.addEventListener('input', () => {
   code = rawEl.value;
   scheduleHighlightUpdate();
   scheduleLintUpdate();
+
+  // Auto-render after 1 second of inactivity
+  if (autoRenderTimeout) clearTimeout(autoRenderTimeout);
+  autoRenderTimeout = setTimeout(() => {
+    initMermaid(themeSel.value || currentTheme);
+    render();
+  }, 1000);
 });
 rawEl.addEventListener('scroll', syncHighlightScroll);
 rawEl.addEventListener('select', updateOverlaySelectionVisibility);
