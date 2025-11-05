@@ -116,6 +116,13 @@ function normalizeBracketLabelParens(text) {
 }
 
 function render() {
+  // Guard against simultaneous renders
+  if (isRendering) {
+    console.warn('Render already in progress, skipping...');
+    return;
+  }
+
+  isRendering = true;
   setStatus('Rendering…');
   canvasEl.innerHTML = ''; // clear previous render
 
@@ -129,6 +136,7 @@ function render() {
   // Run Mermaid
   if (!mermaid) {
     setStatus('Mermaid not loaded');
+    isRendering = false;
     return;
   }
   mermaid.run({ querySelector: '#canvas .mermaid' })
@@ -168,10 +176,12 @@ function render() {
         }
       }
       setStatus('Done');
+      isRendering = false;
     })
     .catch((err) => {
       console.error(err);
       setStatus('Error — see console');
+      isRendering = false;
     });
 }
 
@@ -251,21 +261,34 @@ async function main() {
   }
 }
 
-// Auto-render timer
+// Auto-render system
 let autoRenderTimeout = null;
+let isRendering = false; // Guard against simultaneous renders
+
+function cancelAutoRender() {
+  if (autoRenderTimeout) {
+    clearTimeout(autoRenderTimeout);
+    autoRenderTimeout = null;
+  }
+}
+
+function scheduleAutoRender() {
+  cancelAutoRender();
+  autoRenderTimeout = setTimeout(() => {
+    autoRenderTimeout = null;
+    if (!isRendering) {
+      initMermaid(themeSel.value || currentTheme);
+      render();
+    }
+  }, 1000);
+}
 
 // UI bindings
 rawEl.addEventListener('input', () => {
   code = rawEl.value;
   scheduleHighlightUpdate();
   scheduleLintUpdate();
-
-  // Auto-render after 1 second of inactivity
-  if (autoRenderTimeout) clearTimeout(autoRenderTimeout);
-  autoRenderTimeout = setTimeout(() => {
-    initMermaid(themeSel.value || currentTheme);
-    render();
-  }, 1000);
+  scheduleAutoRender();
 });
 rawEl.addEventListener('scroll', syncHighlightScroll);
 rawEl.addEventListener('select', updateOverlaySelectionVisibility);
@@ -276,6 +299,8 @@ rawEl.addEventListener('blur', () => setOverlayHidden(false));
 document.addEventListener('selectionchange', updateOverlaySelectionVisibility);
 
 rerenderBtn.addEventListener('click', () => {
+  // Cancel any pending auto-render since user triggered manual render
+  cancelAutoRender();
   // Reinitialize to apply theme changes too
   initMermaid(themeSel.value || currentTheme);
   render();
@@ -283,6 +308,8 @@ rerenderBtn.addEventListener('click', () => {
 
 exportBtn.addEventListener('click', exportSVG);
 themeSel.addEventListener('change', async () => {
+  // Cancel any pending auto-render since theme change triggers immediate render
+  cancelAutoRender();
   try {
     if (chrome?.storage?.local) {
       await chrome.storage.local.set({ theme: themeSel.value });
@@ -295,6 +322,8 @@ themeSel.addEventListener('change', async () => {
 });
 
 structureSel.addEventListener('change', async () => {
+  // Cancel any pending auto-render since structure change triggers immediate render
+  cancelAutoRender();
   try {
     if (chrome?.storage?.local) {
       await chrome.storage.local.set({ structure: structureSel.value });
@@ -1288,6 +1317,11 @@ function setupInteractions() {
     updateMinimap();
     if (saveSizeTimer) clearTimeout(saveSizeTimer);
     saveSizeTimer = setTimeout(savePopupSize, 250);
+  });
+
+  // Cleanup auto-render timer on window unload
+  window.addEventListener('beforeunload', () => {
+    cancelAutoRender();
   });
 }
 
