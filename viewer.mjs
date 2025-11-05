@@ -27,6 +27,9 @@ const ontopChk = qs('#ontop');
 const lintPanel = qs('#lintPanel');
 const lintToggle = qs('#lintToggle');
 const lintResults = qs('#lintResults');
+const helpBtn = qs('#helpBtn');
+const helpModal = qs('#helpModal');
+const closeHelp = qs('#closeHelp');
 
 let code = '';
 let renderCounter = 0; // unique id for export renders
@@ -387,6 +390,28 @@ if (lintResults) {
       e.preventDefault();
       e.stopPropagation();
       applyQuickFix(e.target);
+    }
+  });
+}
+
+// Help modal handlers
+if (helpBtn) {
+  helpBtn.addEventListener('click', () => {
+    helpModal?.classList.remove('hidden');
+  });
+}
+
+if (closeHelp) {
+  closeHelp.addEventListener('click', () => {
+    helpModal?.classList.add('hidden');
+  });
+}
+
+// Close help modal when clicking outside content
+if (helpModal) {
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) {
+      helpModal.classList.add('hidden');
     }
   });
 }
@@ -1322,6 +1347,103 @@ function setupInteractions() {
   // Cleanup auto-render timer on window unload
   window.addEventListener('beforeunload', () => {
     cancelAutoRender();
+  });
+
+  // Keyboard shortcuts
+  setupKeyboardShortcuts();
+}
+
+// Keyboard shortcuts system
+function setupKeyboardShortcuts() {
+  // Detect platform for Cmd (Mac) vs Ctrl (Windows/Linux)
+  const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgentData?.platform || '');
+  const modKey = (e) => isMac ? e.metaKey : e.ctrlKey;
+
+  document.addEventListener('keydown', (e) => {
+    // Don't trigger shortcuts when typing in textarea
+    if (e.target === rawEl && !modKey(e)) {
+      return;
+    }
+
+    // Ctrl/Cmd + Enter: Re-render
+    if (modKey(e) && e.key === 'Enter') {
+      e.preventDefault();
+      cancelAutoRender();
+      initMermaid(themeSel.value || currentTheme);
+      render();
+      return;
+    }
+
+    // Ctrl/Cmd + E: Export
+    if (modKey(e) && e.key === 'e') {
+      e.preventDefault();
+      exportSVG();
+      return;
+    }
+
+    // Ctrl/Cmd + B: Toggle code panel
+    if (modKey(e) && e.key === 'b') {
+      e.preventDefault();
+      toggleCodeBtn?.click();
+      return;
+    }
+
+    // Ctrl/Cmd + =: Zoom in
+    if (modKey(e) && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      zoomAroundCenter(1.1);
+      return;
+    }
+
+    // Ctrl/Cmd + -: Zoom out
+    if (modKey(e) && e.key === '-') {
+      e.preventDefault();
+      zoomAroundCenter(1/1.1);
+      return;
+    }
+
+    // Ctrl/Cmd + 0: Fit to view
+    if (modKey(e) && e.key === '0') {
+      e.preventDefault();
+      fitToView();
+      updateMinimap();
+      return;
+    }
+
+    // Ctrl/Cmd + S: Save/Export (alias for export)
+    if (modKey(e) && e.key === 's') {
+      e.preventDefault();
+      exportSVG();
+      return;
+    }
+
+    // Ctrl/Cmd + /: Focus code editor
+    if (modKey(e) && e.key === '/') {
+      e.preventDefault();
+      rawEl?.focus();
+      return;
+    }
+
+    // Ctrl/Cmd + ? or Ctrl/Cmd + Shift + /: Open help modal
+    if (modKey(e) && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+      e.preventDefault();
+      helpModal?.classList.remove('hidden');
+      return;
+    }
+
+    // Escape: Close help modal or blur from textarea
+    if (e.key === 'Escape') {
+      if (helpModal && !helpModal.classList.contains('hidden')) {
+        e.preventDefault();
+        helpModal.classList.add('hidden');
+        return;
+      }
+      if (e.target === rawEl) {
+        e.preventDefault();
+        rawEl.blur();
+        return;
+      }
+    }
   });
 }
 
