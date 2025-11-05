@@ -1424,8 +1424,8 @@ function setupKeyboardShortcuts() {
       return;
     }
 
-    // Ctrl/Cmd + ? or Ctrl/Cmd + Shift + /: Open help modal
-    if (modKey(e) && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+    // Ctrl/Cmd + Shift + / (i.e. Ctrl/Cmd + ?): Open help modal
+    if (modKey(e) && e.shiftKey && e.key === '/') {
       e.preventDefault();
       helpModal?.classList.remove('hidden');
       return;
