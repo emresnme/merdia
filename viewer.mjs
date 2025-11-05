@@ -27,6 +27,9 @@ const ontopChk = qs('#ontop');
 const lintPanel = qs('#lintPanel');
 const lintToggle = qs('#lintToggle');
 const lintResults = qs('#lintResults');
+const helpBtn = qs('#helpBtn');
+const helpModal = qs('#helpModal');
+const closeHelp = qs('#closeHelp');
 
 let code = '';
 let renderCounter = 0; // unique id for export renders
@@ -116,6 +119,13 @@ function normalizeBracketLabelParens(text) {
 }
 
 function render() {
+  // Guard against simultaneous renders
+  if (isRendering) {
+    console.warn('Render already in progress, skipping...');
+    return;
+  }
+
+  isRendering = true;
   setStatus('Rendering…');
   canvasEl.innerHTML = ''; // clear previous render
 
@@ -129,6 +139,7 @@ function render() {
   // Run Mermaid
   if (!mermaid) {
     setStatus('Mermaid not loaded');
+    isRendering = false;
     return;
   }
   mermaid.run({ querySelector: '#canvas .mermaid' })
@@ -168,10 +179,12 @@ function render() {
         }
       }
       setStatus('Done');
+      isRendering = false;
     })
     .catch((err) => {
       console.error(err);
       setStatus('Error — see console');
+      isRendering = false;
     });
 }
 
@@ -251,11 +264,34 @@ async function main() {
   }
 }
 
+// Auto-render system
+let autoRenderTimeout = null;
+let isRendering = false; // Guard against simultaneous renders
+
+function cancelAutoRender() {
+  if (autoRenderTimeout) {
+    clearTimeout(autoRenderTimeout);
+    autoRenderTimeout = null;
+  }
+}
+
+function scheduleAutoRender() {
+  cancelAutoRender();
+  autoRenderTimeout = setTimeout(() => {
+    autoRenderTimeout = null;
+    if (!isRendering) {
+      initMermaid(themeSel.value || currentTheme);
+      render();
+    }
+  }, 1000);
+}
+
 // UI bindings
 rawEl.addEventListener('input', () => {
   code = rawEl.value;
   scheduleHighlightUpdate();
   scheduleLintUpdate();
+  scheduleAutoRender();
 });
 rawEl.addEventListener('scroll', syncHighlightScroll);
 rawEl.addEventListener('select', updateOverlaySelectionVisibility);
@@ -266,6 +302,8 @@ rawEl.addEventListener('blur', () => setOverlayHidden(false));
 document.addEventListener('selectionchange', updateOverlaySelectionVisibility);
 
 rerenderBtn.addEventListener('click', () => {
+  // Cancel any pending auto-render since user triggered manual render
+  cancelAutoRender();
   // Reinitialize to apply theme changes too
   initMermaid(themeSel.value || currentTheme);
   render();
@@ -273,6 +311,8 @@ rerenderBtn.addEventListener('click', () => {
 
 exportBtn.addEventListener('click', exportSVG);
 themeSel.addEventListener('change', async () => {
+  // Cancel any pending auto-render since theme change triggers immediate render
+  cancelAutoRender();
   try {
     if (chrome?.storage?.local) {
       await chrome.storage.local.set({ theme: themeSel.value });
@@ -285,6 +325,8 @@ themeSel.addEventListener('change', async () => {
 });
 
 structureSel.addEventListener('change', async () => {
+  // Cancel any pending auto-render since structure change triggers immediate render
+  cancelAutoRender();
   try {
     if (chrome?.storage?.local) {
       await chrome.storage.local.set({ structure: structureSel.value });
@@ -348,6 +390,28 @@ if (lintResults) {
       e.preventDefault();
       e.stopPropagation();
       applyQuickFix(e.target);
+    }
+  });
+}
+
+// Help modal handlers
+if (helpBtn) {
+  helpBtn.addEventListener('click', () => {
+    helpModal?.classList.remove('hidden');
+  });
+}
+
+if (closeHelp) {
+  closeHelp.addEventListener('click', () => {
+    helpModal?.classList.add('hidden');
+  });
+}
+
+// Close help modal when clicking outside content
+if (helpModal) {
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) {
+      helpModal.classList.add('hidden');
     }
   });
 }
@@ -1278,6 +1342,108 @@ function setupInteractions() {
     updateMinimap();
     if (saveSizeTimer) clearTimeout(saveSizeTimer);
     saveSizeTimer = setTimeout(savePopupSize, 250);
+  });
+
+  // Cleanup auto-render timer on window unload
+  window.addEventListener('beforeunload', () => {
+    cancelAutoRender();
+  });
+
+  // Keyboard shortcuts
+  setupKeyboardShortcuts();
+}
+
+// Keyboard shortcuts system
+function setupKeyboardShortcuts() {
+  // Detect platform for Cmd (Mac) vs Ctrl (Windows/Linux)
+  const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgentData?.platform || '');
+  const modKey = (e) => isMac ? e.metaKey : e.ctrlKey;
+
+  document.addEventListener('keydown', (e) => {
+    // Don't trigger shortcuts when typing in textarea
+    if (e.target === rawEl && !modKey(e)) {
+      return;
+    }
+
+    // Ctrl/Cmd + Enter: Re-render
+    if (modKey(e) && e.key === 'Enter') {
+      e.preventDefault();
+      cancelAutoRender();
+      initMermaid(themeSel.value || currentTheme);
+      render();
+      return;
+    }
+
+    // Ctrl/Cmd + E: Export
+    if (modKey(e) && e.key === 'e') {
+      e.preventDefault();
+      exportSVG();
+      return;
+    }
+
+    // Ctrl/Cmd + B: Toggle code panel
+    if (modKey(e) && e.key === 'b') {
+      e.preventDefault();
+      toggleCodeBtn?.click();
+      return;
+    }
+
+    // Ctrl/Cmd + =: Zoom in
+    if (modKey(e) && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      zoomAroundCenter(1.1);
+      return;
+    }
+
+    // Ctrl/Cmd + -: Zoom out
+    if (modKey(e) && e.key === '-') {
+      e.preventDefault();
+      zoomAroundCenter(1/1.1);
+      return;
+    }
+
+    // Ctrl/Cmd + 0: Fit to view
+    if (modKey(e) && e.key === '0') {
+      e.preventDefault();
+      fitToView();
+      updateMinimap();
+      return;
+    }
+
+    // Ctrl/Cmd + S: Save/Export (alias for export)
+    if (modKey(e) && e.key === 's') {
+      e.preventDefault();
+      exportSVG();
+      return;
+    }
+
+    // Ctrl/Cmd + /: Focus code editor
+    if (modKey(e) && e.key === '/') {
+      e.preventDefault();
+      rawEl?.focus();
+      return;
+    }
+
+    // Ctrl/Cmd + Shift + / (i.e. Ctrl/Cmd + ?): Open help modal
+    if (modKey(e) && e.shiftKey && e.key === '/') {
+      e.preventDefault();
+      helpModal?.classList.remove('hidden');
+      return;
+    }
+
+    // Escape: Close help modal or blur from textarea
+    if (e.key === 'Escape') {
+      if (helpModal && !helpModal.classList.contains('hidden')) {
+        e.preventDefault();
+        helpModal.classList.add('hidden');
+        return;
+      }
+      if (e.target === rawEl) {
+        e.preventDefault();
+        rawEl.blur();
+        return;
+      }
+    }
   });
 }
 
